@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api';
 
 const LLMChat = () => {
   const [messages, setMessages] = useState<string[]>([]);
+  // TODO: SHOuld LLMInput be lowercase?
   const LLMInput = useAppSelector((state) => state.appState.state.LLMInput);
   const [inputValue, setInputValue] = useState('');
 

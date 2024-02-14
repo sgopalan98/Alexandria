@@ -1,7 +1,7 @@
 // This scroll container is necessary because of a visual bug.
 // If there is a scrollbar and a border-radius on the container, the blockiness of the scrollbar will stick out
 // See for example: https://stackoverflow.com/questions/62789354/how-to-hide-scrollbar-thumb-in-border-radius-element
-
+// TODO: Is the casing here correct?
 .LLMChatScrollContainer{
   background-color:var(--background-secondary);
   border: 1px solid rgba(0, 0, 0, 0.233);

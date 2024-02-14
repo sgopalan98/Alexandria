@@ -41,7 +41,7 @@ const ToggleMenu:appStateReducerSingle = (state) =>{
 const SetDictionaryWord:appStateReducer = (state, action: PayloadAction<string>) =>{
   state.state.dictionaryWord = action.payload
 }
-
+// TODO: Should LLMInput be lowercase?
 const SetLLMInput:appStateReducer = (state, action: PayloadAction<string>) =>{
   state.state.LLMInput = action.payload
 }

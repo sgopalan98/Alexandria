@@ -14,6 +14,7 @@ export interface defaultAppState {
         dualReaderMode: boolean,
         dualReaderReversed: boolean,
         dictionaryWord: string,
+        // TODO: Should LLMInput be lowercase?
         LLMInput: string,
         sidebarMenuSelected: boolean|string,
         themeMenuActive: boolean,

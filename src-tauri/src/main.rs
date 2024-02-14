@@ -844,7 +844,7 @@ fn get_config_path_js() -> String {
     return get_config_path().display().to_string();
 }
 
-
+// TODO: Why can I not set Resut<String, Error> here?
 #[tauri::command]
 async fn llm_answer_question(context: String, question: String) -> Result<String, ()>{
     let client = Client::new();
