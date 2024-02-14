@@ -14,6 +14,7 @@ export interface defaultAppState {
         dualReaderMode: boolean,
         dualReaderReversed: boolean,
         dictionaryWord: string,
+        LLMInput: string,
         sidebarMenuSelected: boolean|string,
         themeMenuActive: boolean,
         menuToggled: boolean,

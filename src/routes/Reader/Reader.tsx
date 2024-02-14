@@ -29,6 +29,7 @@ import { appWindow } from '@tauri-apps/api/window'
 import ProgressMenu from './ProgressMenu/ProgressMenu'
 import FooterBar from './FooterBar/FooterBar'
 import { platform } from '@tauri-apps/api/os';
+import LLMChat from './ReaderView/components/LLMChat/LLMChat'
 
 const Home = () =>{
   const selectedRendition:number = useAppSelector((state) => state.appState.state.selectedRendition)
@@ -214,6 +215,7 @@ const Home = () =>{
       <FooterBar/>
       <ProgressMenu/>
       <Dictionary/>
+      <LLMChat/>
 
 
       <div onClick={()=>{

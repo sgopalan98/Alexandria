@@ -11,6 +11,7 @@ import {
 import styles from './QuickbarModal.module.scss'
 import Copy from '@resources/iconmonstr/iconmonstr-copy-9.svg'
 import Book from '@resources/iconmonstr/iconmonstr-book-26.svg'
+import ChatGPT from '@resources/iconmonstr/iconmonstr-speech-bubble-comment-thin.svg'
 import Search from '@resources/iconmonstr/iconmonstr-magnifier-2.svg'
 
 import { useAppSelector, useAppDispatch } from '@store/hooks';
@@ -18,7 +19,7 @@ import { CalculateBoxPosition, NOTE_MODAL_HEIGHT, NOTE_MODAL_WIDTH, QUICKBAR_MOD
 import { Rendition } from '@btpf/epubjs';
 import toast from 'react-hot-toast';
 import { writeText } from '@tauri-apps/api/clipboard';
-import { MoveNoteModal, MoveQuickbarModal, SelectSidebarMenu, SetDictionaryWord, SetModalCFI, ShowNoteModal } from '@store/slices/appState';
+import { MoveNoteModal, MoveQuickbarModal, SelectSidebarMenu, SetDictionaryWord, SetLLMInput, SetModalCFI, ShowNoteModal } from '@store/slices/appState';
 
 
 const COLORS = ['#FFD600', 'red', 'orange','#00FF29', 'cyan']
@@ -77,6 +78,17 @@ const QuickbarModal = () =>{
                 visible: false
               }))
 
+            }}/></div>
+            <div><ChatGPT onClick={()=>{
+              console.log("About to call Chat GPT with", result)
+              dispatch(SetLLMInput(result))
+              renditionInstance.annotations.remove(selectedCFI, "highlight")
+              dispatch(MoveQuickbarModal({
+                view: 0,
+                x:0,
+                y:0,
+                visible: false
+              }))
             }}/></div>
             <div onClick={()=>{
               dispatch(SelectSidebarMenu("Search#" + result))

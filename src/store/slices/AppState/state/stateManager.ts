@@ -42,6 +42,10 @@ const SetDictionaryWord:appStateReducer = (state, action: PayloadAction<string>)
   state.state.dictionaryWord = action.payload
 }
 
+const SetLLMInput:appStateReducer = (state, action: PayloadAction<string>) =>{
+  state.state.LLMInput = action.payload
+}
+
 const ToggleThemeMenu:appStateReducerSingle =(state) =>{
   state.state.themeMenuActive = !state.state.themeMenuActive
 }
@@ -84,6 +88,7 @@ export const actions = {
   CloseSidebarMenu,
   ToggleMenu,
   SetDictionaryWord,
+  SetLLMInput,
   ToggleThemeMenu,
   setReaderMargins,
   SetDualReaderMode,

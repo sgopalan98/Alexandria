@@ -49,8 +49,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
     fn get_font_folder_path() -> PathBuf{
         return font_folder.get().unwrap().clone();
     }
-
-
+use async_openai::{config::OpenAIConfig, types::{AssistantObject, AssistantTools, AssistantToolsRetrieval, CreateAssistantRequestArgs, CreateFileRequestArgs, CreateMessageRequest, CreateMessageRequestArgs, CreateRunRequestArgs, CreateThreadRequestArgs, FileInput, MessageContent, RunStatus, ThreadObject}, Client};
+use std::error::Error;
     
 #[tokio::main]
 async fn main() {
@@ -123,7 +123,8 @@ async fn main() {
             delete_book,
             get_config_path_js,
             add_system_font,
-            list_system_fonts
+            list_system_fonts,
+            llm_answer_question
         ])
         .run(tauri::generate_context!()) // Create a ../dist folder if it there is an error on this line
         .expect("error while running tauri application");
@@ -841,4 +842,178 @@ fn get_settings() -> SettingsConfig {
 fn get_config_path_js() -> String {
 
     return get_config_path().display().to_string();
+}
+
+
+#[tauri::command]
+async fn llm_answer_question(context: String, question: String) -> Result<String, ()>{
+    let client = Client::new();
+    let assistant = get_or_create_novelgpt_assistant(&client).await.unwrap();
+    let assistant_id = assistant.id.clone();
+    let mut book_name = "Crime_and_Punishment-PV.pdf";
+    let file_id = get_or_create_book_file(&client, book_name).await.unwrap();
+
+    let thread_request = CreateThreadRequestArgs::default().build().unwrap();
+    let thread = client.threads().create(thread_request.clone()).await.unwrap();
+
+    // Setup LLM
+    let initial_message = CreateMessageRequestArgs::default()
+    .role("user")
+    .content("Answer based on the book I have attached")
+    .file_ids(vec![file_id])
+    .build().unwrap();
+    answer_question(&assistant_id, client.clone(), thread.clone(), initial_message).await.unwrap();
+
+    // Ask the actual question
+    let question = format!("Context: {}, Question: {}", context, question);
+    let message = CreateMessageRequestArgs::default()
+            .role("user")
+            .content(question)
+            .build()
+            .unwrap();
+
+    
+    answer_question(&assistant_id, client.clone(), thread.clone(), message).await
+}
+
+async fn answer_question(assistant_id: &str, client: Client<OpenAIConfig>, thread: ThreadObject, message: CreateMessageRequest) -> Result<String, ()>{
+    let query = [("limit", "1")];
+    // attach message to the thread
+    let _message_obj = client
+    .threads()
+    .messages(&thread.id)
+    .create(message)
+    .await.unwrap();
+
+    //create a run for the thread
+    let run_request = CreateRunRequestArgs::default()
+    .assistant_id(assistant_id)
+    .build().unwrap();
+    let run = client
+        .threads()
+        .runs(&thread.id)
+        .create(run_request)
+        .await.unwrap();
+
+    //wait for the run to complete
+    let mut awaiting_response = true;
+    while awaiting_response {
+        //retrieve the run
+        let run = client
+            .threads()
+            .runs(&thread.id)
+            .retrieve(&run.id)
+            .await.unwrap();
+        //check the status of the run
+        match run.status {
+            RunStatus::Completed => {
+                awaiting_response = false;
+                // once the run is completed we
+                // get the response from the run
+                // which will be the first message
+                // in the thread
+
+                //retrieve the response from the run
+                let response = client
+                    .threads()
+                    .messages(&thread.id)
+                    .list(&query)
+                    .await.unwrap();
+                //get the message id from the response
+                let message_id = response
+                    .data.get(0).unwrap()
+                    .id.clone();
+                //get the message from the response
+                let message = client
+                    .threads()
+                    .messages(&thread.id)
+                    .retrieve(&message_id)
+                    .await.unwrap();
+                //get the content from the message
+                let content = message
+                    .content.get(0).unwrap();
+                //get the text from the content
+                let text = match content {
+                    MessageContent::Text(text) => text.text.value.clone(),
+                    MessageContent::ImageFile(_) => panic!("imaged are not supported in the terminal"),
+                };
+                //print the text
+                println!("--- Response: {}", text);
+                println!("");
+                return Ok(text);
+            }
+            RunStatus::Failed => {
+                awaiting_response = false;
+                println!("--- Run Failed: {:#?}", run);
+            }
+            RunStatus::Queued => {
+                println!("--- Run Queued");
+            },
+            RunStatus::Cancelling => {
+                println!("--- Run Cancelling");
+            },
+            RunStatus::Cancelled => {
+                println!("--- Run Cancelled");
+            },
+            RunStatus::Expired => {
+                println!("--- Run Expired");
+            },
+            RunStatus::RequiresAction => {
+                println!("--- Run Requires Action");
+            },
+            RunStatus::InProgress => {
+                println!("--- Waiting for response...");
+            }
+        }
+        //wait for 1 second before checking the status again
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    return Ok("Result not found".to_string());
+}
+
+async fn get_or_create_novelgpt_assistant(client: &Client<OpenAIConfig>) -> Result<AssistantObject, Box<dyn Error>>{
+    println!("Querying for assistants...");
+    let query = [("limit", "20")];
+    let assistants = client.assistants().list(&query).await?;
+    println!("Assistants: {:#?}", assistants);
+    let novelgpt_assistant = assistants.data.iter().find(|assistant| assistant.name.as_ref().unwrap() == "Novel GPT Alexandria");
+    let novelgpt_assistant = match novelgpt_assistant {
+        Some(assistant) => {
+            assistant.clone()
+        },
+        None => {
+            let assistant_request = CreateAssistantRequestArgs::default()
+            .name("Novel GPT Alexandria")
+            .model("gpt-4-turbo-previous")
+            .instructions("You are a Novel answering chatbot with access to the books in which questions are asked. Use your knowledge base to best respond to the questions.")
+            .tools(vec![AssistantTools::Retrieval(AssistantToolsRetrieval::default())])
+            .build()?;
+            let assistant = client.assistants().create(assistant_request).await?;
+            assistant
+        }
+    };
+    println!("NovelGPT Assistant {:#?}", novelgpt_assistant);
+    Ok(novelgpt_assistant)
+}
+
+async fn get_or_create_book_file(client: &Client<OpenAIConfig>, book_name: &str) -> Result<String, Box<dyn Error>> {
+    let query = [("limit", "20")];
+    let files = client.files().list(&query).await?;
+    let book_file = files.data.iter().find(|file| file.filename == book_name);
+    let book_file = match book_file {
+        Some(file) => {
+            file.clone()
+        },
+        None => {
+            let file_contents = fs::read(book_name)?;
+            let bytes = bytes::Bytes::from(file_contents);
+            let file_request= CreateFileRequestArgs::default()
+            .file(FileInput::from_bytes(book_name.to_string(), bytes))
+            .purpose("assistants")
+            .build()?;
+            let file = client.files().create(file_request).await?;
+            file
+        }
+    };
+    Ok(book_file.id)
 }

@@ -1,4 +1,4 @@
-import { HideNoteModal, HideQuickbarModal, MoveNoteModal, MoveQuickbarModal, SelectSidebarMenu, SetDictionaryWord, SetModalCFI, SetSelectedRendition, ToggleMenu, ToggleThemeMenu } from "@store/slices/appState";
+import { HideNoteModal, HideQuickbarModal, MoveNoteModal, MoveQuickbarModal, SelectSidebarMenu, SetDictionaryWord, SetLLMInput, SetModalCFI, SetSelectedRendition, ToggleMenu, ToggleThemeMenu } from "@store/slices/appState";
 import { AllowMouseEvent, setProgrammaticProgressUpdate, SetProgress, SkipMouseEvent, ToggleBookmark } from "@store/slices/bookState";
 import { LOADSTATE } from "@store/slices/constants";
 import { bookStateStructure } from "@store/slices/EpubJSBackend/epubjsManager.d";
@@ -27,6 +27,7 @@ export default (renditionInstance:Rendition, view:number)=>{
   let skipMouseEvent!:boolean
   let fontName!:string
   let DictionaryWord!:string
+  let LLMInput!:string
   let isProgrammaticProgressUpdate!:boolean
   let loadState!:LOADSTATE
   let selectedRendition!:number
@@ -58,6 +59,7 @@ export default (renditionInstance:Rendition, view:number)=>{
     menuActive = newState.appState.state.menuToggled
     skipMouseEvent = bookState?.state?.skipMouseEvent
     DictionaryWord = newState.appState.state?.dictionaryWord
+    LLMInput = newState.appState.state?.LLMInput
     fontName = bookState?.data?.theme?.font
     isProgrammaticProgressUpdate = bookState?.state?.isProgrammaticProgressUpdate
     loadState = bookState?.loadState
@@ -234,6 +236,11 @@ export default (renditionInstance:Rendition, view:number)=>{
     // If the dictionary is open and the book is clicked, close the dictionary
     if(DictionaryWord){
       store.dispatch(SetDictionaryWord(""))
+      return
+    }
+
+    if(LLMInput) {
+      store.dispatch(SetLLMInput(""))
       return
     }
 
