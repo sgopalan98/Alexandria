@@ -8,6 +8,7 @@ import GlobalTheme from "./pages/GlobalTheme"
 import Fonts from "./pages/Fonts/Fonts"
 import TitleBarButtons from "@shared/components/TitleBarButtons"
 import About from "./pages/About"
+import QABot from "./pages/QABot"
 
 const Settings = (props:any)=>{
   const navigate = useNavigate()
@@ -48,6 +49,7 @@ const Settings = (props:any)=>{
           <div style={location.pathname.endsWith("Themes")? {fontWeight:"bold"}:{}} onClick={()=>navigate("Themes", {state:{backPath}})}>Themes</div>
           {/* <div onClick={()=>navigate("Reader Theme")}>Reader Theme</div> */}
           <div  style={location.pathname.endsWith("Fonts")? {fontWeight:"bold"}:{}} onClick={()=>navigate("Fonts", {state:{backPath}})}>Fonts</div>
+          <div  style={location.pathname.endsWith("QABot")? {fontWeight:"bold"}:{}} onClick={()=>navigate("QABot", {state:{backPath}})}>QABot</div>
           <div  style={location.pathname.endsWith("About")? {fontWeight:"bold", marginTop:"auto"}:{marginTop:"auto"}} onClick={()=>navigate("About", {state:{backPath}})}>About</div>
         </div>
 
@@ -57,6 +59,7 @@ const Settings = (props:any)=>{
             <Route path="/Themes" element={<GlobalTheme />} />
             {/* <Route path="/Reader Theme" element={<ReaderTheme />} /> */}
             <Route path="/Fonts" element={<Fonts />} />
+            <Route path="/QABot" element={<QABot />} />
             <Route path="/About" element={<About />} />
           </Routes>
         </div>

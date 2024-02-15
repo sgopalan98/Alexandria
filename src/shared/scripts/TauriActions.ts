@@ -66,7 +66,7 @@ export const importBook = async (file:string)=>{
     if(response){
       const returnData = {title: response.title, modified: response.modified, author: response.author, cover_url: response.cover_url || "", progress: 0, hash:response.hash}
 
-      
+      // TODO: Should I convert PDF here as well?
       // If the file is not converted to an epub, we will need to do parsing on the client side
       // Here we will extract any metadata and create the cover if one exists
       if(!BACKEND_MANAGED.includes(filetype) ){

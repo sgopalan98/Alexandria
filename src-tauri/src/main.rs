@@ -17,6 +17,7 @@ use std::{
 
 use epub::doc::EpubDoc;
 use libmobi_rs::convertToEpubWrapper;
+use pandoc::{OutputKind, Pandoc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -124,7 +125,8 @@ async fn main() {
             get_config_path_js,
             add_system_font,
             list_system_fonts,
-            llm_answer_question
+            llm_answer_question,
+            create_assistant,
         ])
         .run(tauri::generate_context!()) // Create a ../dist folder if it there is an error on this line
         .expect("error while running tauri application");
@@ -137,6 +139,53 @@ enum DataExists {
     CREATED,
     LOADED,
 }
+
+#[tauri::command]
+async fn create_assistant(api_key: String) -> Result<String, String> {
+    let config = OpenAIConfig::new().with_api_key(api_key);
+    let client = Client::with_config(config);
+
+    println!("Querying for assistants...");
+    let query = [("limit", "20")];
+    let assistants = client.assistants().list(&query).await.unwrap();
+    println!("Assistants: {:#?}", assistants);
+    let novelgpt_assistant = assistants.data.iter().find(|assistant| assistant.name.as_ref().unwrap() == "Novel GPT Alexandria");
+    let novelgpt_assistant = match novelgpt_assistant {
+        Some(assistant) => {
+            assistant.clone()
+        },
+        None => {
+            let assistant_request = CreateAssistantRequestArgs::default()
+            .name("Novel GPT Alexandria")
+            .model("gpt-4-turbo-preview")
+            .instructions("You are a Novel answering chatbot with access to the books in which questions are asked. Use your knowledge base to best respond to the questions.")
+            .tools(vec![AssistantTools::Retrieval(AssistantToolsRetrieval::default())])
+            .build().unwrap();
+            let assistant = client.assistants().create(assistant_request).await.unwrap();
+            assistant
+        }
+    };
+    println!("NovelGPT Assistant {:#?}", novelgpt_assistant);
+    
+    // Update settings.json with the assistant id
+    // TODO: Is there a better way to do this? This is repeating work from 'set_settings'
+    let file = File::open(get_config_path().join("settings.json")).unwrap();
+
+    let reader = BufReader::new(file);
+
+    let settings_json: serde_json::Value = serde_json::from_reader(reader).expect("JSON was not well-formatted");
+    println!("PRINTING GET SETTINGS: {:?}", settings_json);
+    
+    let mut payload: SettingsConfig = serde_json::from_value(settings_json).unwrap();
+    payload.assistantId = novelgpt_assistant.id.clone();
+    std::fs::write(
+        get_config_path().join("settings.json"),
+        serde_json::to_string_pretty(&payload).unwrap(),
+    ).unwrap();
+    
+    Ok(novelgpt_assistant.id)
+}
+
 
 fn create_or_load_data() -> Option<DataExists> {
 
@@ -161,6 +210,7 @@ fn create_or_load_data() -> Option<DataExists> {
     }
 }
 
+// TODO: This doesn't handle errors; a lot of unwraps everywhere... should be replaced with ?
 #[tauri::command]
 fn import_book(payload: String) -> Result<BookHydrate, String> {
     let path = Path::new(&payload);
@@ -308,6 +358,13 @@ fn import_book(payload: String) -> Result<BookHydrate, String> {
     )
     .unwrap();
 
+    // TODO: Is this the correct condition to check if the book is ePub?
+    // TODO: Is the false value correct? What is PathBuf::new() as a string?
+    let pdf_url = match is_parsable {
+        true => convert_epub_to_pdf(bookLocation.to_str().unwrap(), &hashed_book_folder, &file_stem_unwrapped).unwrap(),
+        false => PathBuf::new()
+    };
+
     let response = BookHydrate {
         cover_url: if coverExists {
             hashed_book_folder.join("cover.jpg").to_str().unwrap().to_string()
@@ -320,9 +377,20 @@ fn import_book(payload: String) -> Result<BookHydrate, String> {
         title: title,
         author:author,
         modified: milliseconds_u64,
+        pdf_url: pdf_url.to_str().unwrap().to_string()
     };
 
     return Ok(response);
+}
+
+fn convert_epub_to_pdf(epub_path: &str, hashed_book_folder: &PathBuf, book_name: &str) -> Result<PathBuf, Box<dyn Error>>{
+    let mut pandoc = Pandoc::new();
+    pandoc.add_input(epub_path);
+    let pdf_name = book_name.to_string() + ".pdf";
+    let pdf_path = hashed_book_folder.join(pdf_name);
+    pandoc.set_output(OutputKind::File(pdf_path.clone()));
+    pandoc.execute()?;
+    return Ok(pdf_path);
 }
 
 fn get_hash(data: &Vec<u8>) -> String {
@@ -332,6 +400,7 @@ fn get_hash(data: &Vec<u8>) -> String {
     return format!("{:x}", checksum);
 }
 
+// TODO: URL vs PATH? What is correct?
 #[derive(Deserialize, Serialize)]
 struct BookHydrate {
     cover_url: String,
@@ -340,6 +409,7 @@ struct BookHydrate {
     progress: f64,
     title: String,
     author: String,
+    pdf_url: String,
     modified: u64
 }
 
@@ -351,6 +421,7 @@ fn get_books() -> Vec<BookHydrate> {
     let hashed_book_folders = fs::read_dir(get_config_path().join("books")).unwrap();
 
     let mut hydration_data: Vec<BookHydrate> = Vec::new();
+    // TODO: There is a bug here in MacOS where .DS_Store is being read as a book hash
     for hashed_book_folder in hashed_book_folders {
         let hashed_book_folder = &hashed_book_folder.unwrap();
 
@@ -368,12 +439,14 @@ fn get_books() -> Vec<BookHydrate> {
         let mut progress: f64 = 0.0;
         let mut cover_path = String::new();
         let mut modified:u64 = 0;
+        let mut pdf_path = String::new();
 
         for book_file in book_folder {
             let book_file = book_file.unwrap().path().display().to_string();
             let is_epub = book_file.contains(".epub");
             let is_data = book_file.contains(".json") && !book_file.contains("locations_cache.json");
             let is_cover = book_file.contains(".jpg");
+            let is_pdf = book_file.contains(".pdf");
 
             if is_epub {
                 epub_path.push_str(&book_file);
@@ -408,10 +481,13 @@ fn get_books() -> Vec<BookHydrate> {
 
             } else if is_cover {
                 cover_path.push_str(&book_file);
+            } else if is_pdf {
+                pdf_path.push_str(&book_file);
             }
         }
         println!("BOOK PATH: {}", epub_path);
         println!("Cover PATH: {}", cover_path);
+        println!("PDF Path: {}", pdf_path);
 
         let folderData: BookHydrate = BookHydrate {
             cover_url: cover_path,
@@ -420,7 +496,8 @@ fn get_books() -> Vec<BookHydrate> {
             progress,
             title,
             author,
-            modified
+            modified,
+            pdf_url: pdf_path
         };
         hydration_data.push(folderData)
     }
@@ -808,6 +885,9 @@ struct SettingsConfig {
     sortBy: String,
     #[serde(default)]
     readerMargins: i64,
+    // TODO: Is this the best place?
+    #[serde(default)]
+    assistantId: String
 }
 
 #[tauri::command]
