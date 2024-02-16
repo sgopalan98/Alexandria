@@ -8,11 +8,7 @@
 // https://users.rust-lang.org/t/add-unstable-feature-only-if-compiled-on-nightly/27886
 #![cfg_attr(feature = "opt_once_cell", feature(once_cell))]
 use std::{
-    collections::{HashMap, HashSet},
-    env::{self, current_dir},
-    fs::{self, File},
-    io::{BufReader, Read, Write},
-    path::{Path, PathBuf},
+    collections::{HashMap, HashSet}, env::{self, current_dir}, fs::{self, File}, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::{Mutex, RwLock}
 };
 
 use epub::doc::EpubDoc;
@@ -35,27 +31,47 @@ use font_kit::source::SystemSource;
 
 
 use std::io;
-use tauri::{api::path::app_data_dir, Manager};
+use tauri::{api::path::app_data_dir, Manager, State};
 
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-    static app_data_platform_dir: OnceLock<PathBuf> = OnceLock::new();
-    static config_path: OnceLock<PathBuf> = OnceLock::new();
-    static font_folder: OnceLock<PathBuf> = OnceLock::new();
+static app_data_platform_dir: OnceLock<PathBuf> = OnceLock::new();
+static config_path: OnceLock<PathBuf> = OnceLock::new();
+static font_folder: OnceLock<PathBuf> = OnceLock::new();
+    
 
-    fn get_config_path() -> PathBuf{
-        return config_path.get().unwrap().clone();
-    }
-    fn get_font_folder_path() -> PathBuf{
-        return font_folder.get().unwrap().clone();
-    }
+struct SharedState {
+    openai_client: Mutex<Client<OpenAIConfig>>,
+    settings: Mutex<SettingsConfig>,
+    assistant_id: Mutex<String>
+}
+
+
+fn get_config_path() -> PathBuf{
+    return config_path.get().unwrap().clone();
+}
+fn get_font_folder_path() -> PathBuf{
+    return font_folder.get().unwrap().clone();
+}
 use async_openai::{config::OpenAIConfig, types::{AssistantObject, AssistantTools, AssistantToolsRetrieval, CreateAssistantRequestArgs, CreateFileRequestArgs, CreateMessageRequest, CreateMessageRequestArgs, CreateRunRequestArgs, CreateThreadRequestArgs, FileInput, MessageContent, RunStatus, ThreadObject}, Client};
 use std::error::Error;
     
 #[tokio::main]
 async fn main() {
     tauri::Builder::default()
+        .manage(SharedState {
+            openai_client: Mutex::new(Client::new()),
+            settings: Mutex::new(SettingsConfig { 
+                selectedTheme: String::new(), 
+                sortDirection: String::new(), 
+                sortBy: String::new(), 
+                readerMargins: 0, 
+                qaBotId: String::new(),
+                qaBotApiKey: String::new()
+            }),
+            assistant_id: Mutex::new(String::new())
+        })
         .setup(|app| {
             println!("Loading Config Directory");
             let appDataDir = app_data_dir( app.config().as_ref()).unwrap();
@@ -127,6 +143,9 @@ async fn main() {
             list_system_fonts,
             llm_answer_question,
             create_assistant,
+            check_pdf_exists,
+            upload_file_and_create_thread_llm,
+            delete_thread
         ])
         .run(tauri::generate_context!()) // Create a ../dist folder if it there is an error on this line
         .expect("error while running tauri application");
@@ -140,9 +159,15 @@ enum DataExists {
     LOADED,
 }
 
+#[derive(serde::Serialize)]
+struct AssistantDetails {
+    qaBotId: String,
+    qaBotApiKey: String,
+}
+
 #[tauri::command]
-async fn create_assistant(api_key: String) -> Result<String, String> {
-    let config = OpenAIConfig::new().with_api_key(api_key);
+async fn create_assistant(api_key: String, shared_state: State<'_, SharedState>) -> Result<AssistantDetails, String> {
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
     let client = Client::with_config(config);
 
     println!("Querying for assistants...");
@@ -174,16 +199,20 @@ async fn create_assistant(api_key: String) -> Result<String, String> {
     let reader = BufReader::new(file);
 
     let settings_json: serde_json::Value = serde_json::from_reader(reader).expect("JSON was not well-formatted");
-    println!("PRINTING GET SETTINGS: {:?}", settings_json);
+    // TODO: IF there exists already, I shouldn't write it again.
+    let mut payload: SettingsConfig = serde_json::from_value(settings_json.clone()).unwrap();
     
-    let mut payload: SettingsConfig = serde_json::from_value(settings_json).unwrap();
-    payload.assistantId = novelgpt_assistant.id.clone();
+    payload.qaBotApiKey = api_key.clone();
+    payload.qaBotId = novelgpt_assistant.id.clone();
     std::fs::write(
         get_config_path().join("settings.json"),
         serde_json::to_string_pretty(&payload).unwrap(),
     ).unwrap();
-    
-    Ok(novelgpt_assistant.id)
+    *shared_state.openai_client.lock().unwrap() = client;
+    Ok(AssistantDetails {
+        qaBotId: novelgpt_assistant.id.clone(),
+        qaBotApiKey: api_key
+    })
 }
 
 
@@ -381,6 +410,90 @@ fn import_book(payload: String) -> Result<BookHydrate, String> {
     };
 
     return Ok(response);
+}
+
+#[tauri::command]
+fn check_pdf_exists(book_hash: &str) -> Result<bool, bool> {
+    println!("HEY PDF IS GOIUNG TO BE CHECKED");
+    let hashed_book_folder = get_config_path().join("books").join(format!("{book_hash}"));
+    let book_folder = fs::read_dir(&hashed_book_folder).unwrap();
+    for book_file in book_folder {
+        
+        let book_file = book_file.unwrap().path().display().to_string();
+        println!("BOOK FILE: {}", book_file);
+        let is_pdf = book_file.contains(".pdf");
+        if is_pdf {
+            println!("FOUND BIOTCHHHHH");
+            return Ok(true);
+        }
+    }
+    return Err(false);
+}
+
+#[derive(serde::Serialize)]
+struct ThreadDetails {
+    threadId: String,
+    fileId: String
+}
+#[tauri::command]
+async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<'_, SharedState>) -> Result<ThreadDetails, String> {
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+
+
+    let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
+    
+    // Get pdf path from the book_hash folder
+
+    let hashed_book_folder = get_config_path().join("books").join(format!("{book_hash}"));
+    let book_folder = fs::read_dir(&hashed_book_folder).unwrap();
+    let mut pdf_path = "".to_string();
+    for book_file in book_folder {
+        let book_file = book_file.unwrap().path().display().to_string();
+        let is_pdf = book_file.contains(".pdf");
+        if is_pdf {
+            pdf_path = book_file;
+        }
+    }
+
+    // Upload file
+    let file_contents = fs::read(pdf_path.clone()).unwrap();
+    let bytes = bytes::Bytes::from(file_contents);
+    let file_request= CreateFileRequestArgs::default()
+    .file(FileInput::from_bytes(pdf_path, bytes))
+    .purpose("assistants")
+    .build().unwrap();
+    let file = client.files().create(file_request).await.unwrap();
+    let file_id = file.id;
+    
+    // Create thread
+    let thread_request = CreateThreadRequestArgs::default().build().unwrap();
+    let thread = client.threads().create(thread_request.clone()).await.unwrap();
+
+
+    let initial_message = CreateMessageRequestArgs::default()
+    .role("user")
+    .content("Answer based on the book I have attached")
+    .file_ids(vec![file_id.clone()])
+    .build().unwrap();
+
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    answer_question(assistant_id.as_str(), api_key , thread.id.as_str(), initial_message).await;
+    Ok(ThreadDetails {
+        threadId: thread.id,
+        fileId: file_id
+    })
+}
+
+#[tauri::command]
+async fn delete_thread(thread_id: &str, file_id: &str, shared_state: State<'_, SharedState>) -> Result<String, String> {
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+
+    let response = client.files().delete(file_id).await.unwrap();
+    return Ok("Deleted! Please verify".to_string());
 }
 
 fn convert_epub_to_pdf(epub_path: &str, hashed_book_folder: &PathBuf, book_name: &str) -> Result<PathBuf, Box<dyn Error>>{
@@ -887,12 +1000,14 @@ struct SettingsConfig {
     readerMargins: i64,
     // TODO: Is this the best place?
     #[serde(default)]
-    assistantId: String
+    qaBotId: String,
+    #[serde(default)]
+    qaBotApiKey: String,
 }
 
 #[tauri::command]
-fn set_settings(payload: HashMap<String, String>) {
-    println!("{:?}", payload);
+fn set_settings(payload: HashMap<String, String>, shared_state: State<'_, SharedState>) {
+    println!("setting {:?}", payload);
 
     std::fs::write(
         get_config_path().join("settings.json"),
@@ -900,7 +1015,15 @@ fn set_settings(payload: HashMap<String, String>) {
     )
     .unwrap();
 
-    // return themesPayload
+    let file = File::open(get_config_path().join("settings.json")).unwrap();
+
+    let reader = BufReader::new(file);
+
+    let json: serde_json::Value =
+        serde_json::from_reader(reader).expect("JSON was not well-formatted");
+        println!("PRINTING GET SETTINGS: {:?}", json);
+    let mut payload: SettingsConfig = serde_json::from_value(json).unwrap();
+    *shared_state.settings.lock().unwrap() = payload;
 }
 
 #[tauri::command]
@@ -926,24 +1049,7 @@ fn get_config_path_js() -> String {
 
 // TODO: Why can I not set Resut<String, Error> here?
 #[tauri::command]
-async fn llm_answer_question(context: String, question: String) -> Result<String, ()>{
-    let client = Client::new();
-    let assistant = get_or_create_novelgpt_assistant(&client).await.unwrap();
-    let assistant_id = assistant.id.clone();
-    let mut book_name = "Crime_and_Punishment-PV.pdf";
-    let file_id = get_or_create_book_file(&client, book_name).await.unwrap();
-
-    let thread_request = CreateThreadRequestArgs::default().build().unwrap();
-    let thread = client.threads().create(thread_request.clone()).await.unwrap();
-
-    // Setup LLM
-    let initial_message = CreateMessageRequestArgs::default()
-    .role("user")
-    .content("Answer based on the book I have attached")
-    .file_ids(vec![file_id])
-    .build().unwrap();
-    answer_question(&assistant_id, client.clone(), thread.clone(), initial_message).await.unwrap();
-
+async fn llm_answer_question(threadId: &str, context: String, question: String, shared_state: State<'_, SharedState>) -> Result<String, String>{
     // Ask the actual question
     let question = format!("Context: {}, Question: {}", context, question);
     let message = CreateMessageRequestArgs::default()
@@ -952,12 +1058,19 @@ async fn llm_answer_question(context: String, question: String) -> Result<String
             .build()
             .unwrap();
 
-    
-    answer_question(&assistant_id, client.clone(), thread.clone(), message).await
+    let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    // FIXME: Cloning and sending will cause concurrency issues. Just making it work
+    answer_question(assistant_id.as_str(), api_key, threadId, message).await
 }
 
-async fn answer_question(assistant_id: &str, client: Client<OpenAIConfig>, thread: ThreadObject, message: CreateMessageRequest) -> Result<String, ()>{
+// TODO: Change this to _llm_answer_question
+async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, message: CreateMessageRequest) -> Result<String, String> {
     let query = [("limit", "1")];
+
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+    let thread = client.threads().retrieve(thread_id).await.unwrap();
     // attach message to the thread
     let _message_obj = client
     .threads()
@@ -969,6 +1082,7 @@ async fn answer_question(assistant_id: &str, client: Client<OpenAIConfig>, threa
     let run_request = CreateRunRequestArgs::default()
     .assistant_id(assistant_id)
     .build().unwrap();
+
     let run = client
         .threads()
         .runs(&thread.id)

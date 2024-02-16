@@ -46,6 +46,14 @@ const SetLLMInput:appStateReducer = (state, action: PayloadAction<string>) =>{
   state.state.LLMInput = action.payload
 }
 
+const SetQABotId:appStateReducer = (state, action: PayloadAction<string>) =>{
+  state.qaBotId = action.payload
+}
+
+const SetQABotApiKey:appStateReducer = (state, action: PayloadAction<string>) =>{
+  state.qaBotApiKey = action.payload
+}
+
 const ToggleThemeMenu:appStateReducerSingle =(state) =>{
   state.state.themeMenuActive = !state.state.themeMenuActive
 }
@@ -89,6 +97,8 @@ export const actions = {
   ToggleMenu,
   SetDictionaryWord,
   SetLLMInput,
+  SetQABotId,
+  SetQABotApiKey,
   ToggleThemeMenu,
   setReaderMargins,
   SetDualReaderMode,

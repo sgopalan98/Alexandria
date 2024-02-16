@@ -16,16 +16,19 @@ enableMapSet()
 const saveAppStateLocally = debounce((currentState:any)=>{
   invoke("set_global_themes", {payload:currentState.appState.themes})
 
-
+  console.log(currentState.appState);
   invoke("set_settings", {payload:{
     
     selectedTheme: currentState.appState.selectedTheme,
     sortBy: currentState.appState.sortBy,
-    sortDirection: currentState.appState.sortDirection
-  
+    sortDirection: currentState.appState.sortDirection,
+    qaBotId: currentState.appState.qaBotId,
+    qaBotApiKey: currentState.appState.qaBotApiKey
   }})
 
 }, 500)
+
+
 const store =  configureStore({
   reducer: {
     counter: counterSlice,
@@ -52,6 +55,7 @@ const store =  configureStore({
       next(action)
       if(SyncedDataActions.has(action.type)){
         const currentState:RootState = storeAPI.getState()
+        console.log("Current State: ", currentState);
         if(action.type.includes("bookState")){
 
           console.log("Synced bookState Action:", action)

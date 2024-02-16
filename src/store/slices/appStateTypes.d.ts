@@ -7,6 +7,9 @@ export interface defaultAppState {
       sortDirection: string,
       sortBy: string,
       readerMargins: number,
+      // TODO: Should it be isQABotActive?
+      qaBotId: string,
+      qaBotApiKey: string,
       state:{
         localSystemFonts: {[fontName: string]: Array<string>},
         maximized: bool,

@@ -21,6 +21,9 @@ const initialState: defaultAppState = {
   sortBy:"title",
   sortDirection:"ASC",
   readerMargins: 75,
+  // TODO: Better name
+  qaBotId: "",
+  qaBotApiKey: "",
   state:{
     localSystemFonts: {},
     maximized: false,
@@ -28,6 +31,7 @@ const initialState: defaultAppState = {
     dualReaderMode: false,
     dualReaderReversed: false,
     dictionaryWord: "",
+    // TODO: Is this the right place?
     LLMInput: "",
     sidebarMenuSelected: false,
     menuToggled: true, 
@@ -101,6 +105,8 @@ export const {
   ToggleMenu, 
   SetDictionaryWord,
   SetLLMInput,
+  SetQABotId,
+  SetQABotApiKey,
   ToggleThemeMenu,
   SetDualReaderMode,
   resetBookAppState,

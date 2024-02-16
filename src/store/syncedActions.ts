@@ -35,5 +35,7 @@ export default new Set<completeAppStateActionNames|completeBookStateActionNames>
   'bookState/setParagraphSpacing/fulfilled',
   "bookState/setRenderMode",
   "appState/SetSortSettings",
-  "bookState/setTextAlignment/fulfilled"
+  "bookState/setTextAlignment/fulfilled",
+  "appState/SetQABotId",
+  "appState/SetQABotApiKey",
 ])

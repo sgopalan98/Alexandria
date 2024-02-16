@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 
 import { useAppSelector } from "@store/hooks"
-import { LoadThemes, SetLocalFontsList, SetMaximized, setSelectedTheme, SetSortSettings } from "@store/slices/appState"
+import { LoadThemes, SetLocalFontsList, SetMaximized, SetQABotApiKey, SetQABotId, setSelectedTheme, SetSortSettings } from "@store/slices/appState"
 import { invoke } from "@tauri-apps/api"
 import { appWindow } from "@tauri-apps/api/window"
 import React, { useEffect, useLayoutEffect, useState } from "react"
@@ -64,6 +64,12 @@ const InitializeApp = ({children}: JSX.ElementChildrenAttribute) =>{
       invoke("get_settings").then((response:any)=>{
         dispatch(setSelectedTheme(response.selectedTheme))
         dispatch(SetSortSettings({sortBy: response.sortBy, sortDirection:response.sortDirection}))
+        console.log(response.qaBotId);
+        if (response.qaBotId.length > 0) {
+          console.log("setting assistant id")
+          dispatch(SetQABotId(response.qaBotId))
+          dispatch(SetQABotApiKey(response.qaBotApiKey))
+        }
       // dispatch(LoadGlobalThemes(response))
       })
 
