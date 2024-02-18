@@ -471,9 +471,10 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
     let file_id = file.id;
     info!("Open AI: File upload finished");
     // Create thread
+    debug!("Open AI: Creating thread");
     let thread_request = CreateThreadRequestArgs::default().build().unwrap();
     let thread = client.threads().create(thread_request.clone()).await.unwrap();
-
+    debug!("Open AI: Thread created");
 
     let initial_message = CreateMessageRequestArgs::default()
     .role("user")
@@ -1073,14 +1074,18 @@ async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, m
 
     let config = OpenAIConfig::new().with_api_key(api_key.clone());
     let client = Client::with_config(config);
+    debug!("Open AI: Getting thread");
     let thread = client.threads().retrieve(thread_id).await.unwrap();
+    debug!("Open AI: Got thread");
+    debug!("Open AI: Attaching message");
     // attach message to the thread
     let _message_obj = client
     .threads()
     .messages(&thread.id)
     .create(message)
     .await.unwrap();
-
+    debug!("Open AI: Message attached");
+    debug!("Open AI: Creating run");
     //create a run for the thread
     let run_request = CreateRunRequestArgs::default()
     .assistant_id(assistant_id)
@@ -1091,7 +1096,7 @@ async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, m
         .runs(&thread.id)
         .create(run_request)
         .await.unwrap();
-
+    debug!("Open AI: Run created");
     //wait for the run to complete
     let mut awaiting_response = true;
     while awaiting_response {
