@@ -13,6 +13,7 @@ use std::{
 
 use epub::doc::EpubDoc;
 use libmobi_rs::convertToEpubWrapper;
+use log::{debug, info};
 use pandoc::{OutputKind, Pandoc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -101,7 +102,8 @@ async fn main() {
 
             create_or_load_data();
 
-
+            env_logger::init();
+            debug!("LOGGER INIT DONE");
             // https://github.com/tranxuanthang/lrcget/commit/0a2fe9943e40503a1dc5d9bf291314f31ea66941
             // https://github.com/tauri-apps/tauri/issues/3725#issuecomment-1552804332
             #[cfg(target_os = "linux")]
@@ -464,9 +466,10 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
     .file(FileInput::from_bytes(pdf_path, bytes))
     .purpose("assistants")
     .build().unwrap();
+    info!("Open AI: File upload started");
     let file = client.files().create(file_request).await.unwrap();
     let file_id = file.id;
-    
+    info!("Open AI: File upload finished");
     // Create thread
     let thread_request = CreateThreadRequestArgs::default().build().unwrap();
     let thread = client.threads().create(thread_request.clone()).await.unwrap();
@@ -491,7 +494,7 @@ async fn delete_thread(thread_id: &str, file_id: &str, shared_state: State<'_, S
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
     let config = OpenAIConfig::new().with_api_key(api_key.clone());
     let client = Client::with_config(config);
-
+    println!("deleting the file");
     let response = client.files().delete(file_id).await.unwrap();
     return Ok("Deleted! Please verify".to_string());
 }
@@ -1160,7 +1163,7 @@ async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, m
             }
         }
         //wait for 1 second before checking the status again
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
     }
     return Ok("Result not found".to_string());
 }
