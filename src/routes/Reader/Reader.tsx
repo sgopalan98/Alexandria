@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import ReaderView from './ReaderView/ReaderView'
 import styles from './Reader.module.scss'
 
@@ -30,6 +30,7 @@ import ProgressMenu from './ProgressMenu/ProgressMenu'
 import FooterBar from './FooterBar/FooterBar'
 import { platform } from '@tauri-apps/api/os';
 import LLMChat from './ReaderView/components/LLMChat/LLMChat'
+import { invoke } from '@tauri-apps/api'
 
 const Home = () =>{
   const selectedRendition:number = useAppSelector((state) => state.appState.state.selectedRendition)
@@ -45,6 +46,12 @@ const Home = () =>{
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [mouseOverMenu, setMouseOverMenu] = useState(false)
   const [currentPage, setCurrentPage] = useState('')
+  const [pdfExists, setPdfExists] = useState(false)
+  const [threadId, setThreadId] = useState('')
+  const [fileId, setFileId] = useState('')
+
+  const threadIdRef = useRef(threadId);
+  const fileIdRef = useRef(fileId);
 
 
   // Temporary Bug Fix: This is used as a fix for a Windows 11 tauri bug:
@@ -87,6 +94,50 @@ const Home = () =>{
 
   }, [renditionInstance])
 
+
+  useEffect(() => {
+    threadIdRef.current = threadId; // Update ref whenever threadId changes
+  }, [threadId]);
+
+  useEffect(() => {
+    fileIdRef.current = fileId; // Update ref whenever fileId changes
+  }, [fileId]);
+  
+  useEffect(()=>{
+    // TODO: Why is it bookHash1? Lol chumma copy paste...
+    console.log("The book hash is " + params.bookHash1);
+    invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
+      setPdfExists(true);
+      // TODO: SERIOUSLY? That is your function name??
+      invoke('upload_file_and_create_thread_llm', { bookHash: params.bookHash1 }).then((response) => {
+        console.log("Thread created successfully");
+        setThreadId(response.threadId);
+        setFileId(response.fileId);
+        console.log("Setting threadId to " + response.threadId);
+        console.log("Setting fileId to " + response.fileId);
+      }).catch((error) => {
+        console.log("error in upload_file_and_create_thread_llm");
+      });
+    }).catch((error) => {
+      console.log("error in check_pdf_exists");
+    })
+
+
+    return ()=>{
+      console.log("Unmounting");
+      const currentThreadId = threadIdRef.current;
+      const currentFileId = fileIdRef.current;
+      console.log("The thread id is " + currentThreadId);
+      if(currentThreadId.length > 0){
+        console.log("Deleting thread");
+        invoke('delete_thread', { threadId: currentThreadId, fileId: currentFileId }).then((response) => {
+          console.log("Deleted :)")
+        }).catch((error) => {
+          console.log("error in close_thread");
+        });
+      }
+    }
+  }, [])
 
   useEffect(()=>{
     if(!bookmarks){
@@ -215,7 +266,7 @@ const Home = () =>{
       <FooterBar/>
       <ProgressMenu/>
       <Dictionary/>
-      <LLMChat/>
+      <LLMChat threadId={threadId} pdfExists={pdfExists} fileId={fileId}/>
 
 
       <div onClick={()=>{

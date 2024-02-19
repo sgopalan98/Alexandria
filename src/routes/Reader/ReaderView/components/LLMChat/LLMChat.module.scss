@@ -1,55 +1,80 @@
-// This scroll container is necessary because of a visual bug.
-// If there is a scrollbar and a border-radius on the container, the blockiness of the scrollbar will stick out
-// See for example: https://stackoverflow.com/questions/62789354/how-to-hide-scrollbar-thumb-in-border-radius-element
-// TODO: Is the casing here correct?
-.LLMChatScrollContainer{
-  background-color:var(--background-secondary);
+.LLMChatScrollContainer {
+  background-color: var(--background-secondary);
   border: 1px solid rgba(0, 0, 0, 0.233);
   border-top-left-radius: 15px;
   border-top-right-radius: 15px;
-  height:300px;
+  height: 100%;
   width: 100vw;
-  max-width: 500px;
   z-index: 100;
-  transition:0.5s;
-  // Move the default position a few pixels down
-  // transform: translateY(-40px);
-  // padding-top: 10px;
-  // padding-right: 50px;
-
+  transition: 0.5s;
   grid-area: 2/1/4/1;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  
   align-self: flex-end;
   justify-self: center;
 }
 
-.LLMChatScrollContainerCollapsed{
-  height:0px !important;
-  padding-top:0px !important;
-  border:0px;
+.LLMChatScrollContainerCollapsed {
+  height: 0px !important;
+  padding-top: 0px !important;
+  border: 0px;
 }
 
-.LLMChatContainer{
-  height:289px; // height - (border-top  + paddingtop)
-  width: calc(100vw - 10px);
-  max-width: 490px;
-  overflow-y:scroll;
+.nav {
+  cursor: pointer;
+  width: auto;
+  display: flex;
+  margin-left: 20px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  > div {
+      margin-left: 5px;
+      font-size: 18px;
+  }
+  justify-content: space-between;
+}
 
-  // padding:0 15px 50px 15px;
-  
+.navBack {
+  display: flex;
+}
 
-  transition: 1s;
-  // padding-bottom: 100px;
+.LLMInputContainer {
+  height: 30%;
+  width: 100%;
+  overflow-y: auto;
+  flex-shrink: 0;
+
+  margin-top: 10px;
+  border-left: 3px solid #ccc; /* Adjust the color as needed */
+  background-color: #f8f8f8; /* Light background for the quote */
+  padding: 10px 15px; /* Add padding for spacing */
+  margin: 10px 0; /* Margin for separation from other elements */
+  font-style: italic; /* Optional: Italicize the quoted text */
+  overflow-y: auto; /* Keeps it scrollable */
+  height: 30%; /* Adjust as needed */
+  width: 100%;
+}
+
+.qaBotTitle {
+  margin-left: 10px; /* Adjust spacing as needed */
+  font-size: 18px; /* Adjust font size as needed */
+  font-weight: bold; /* Optional: makes it bold */
+  color: #333; /* Adjust color as needed */
+  align-self: center; /* Align vertically within the flex container */
+  justify-content: center; /* Align horizontally within the flex container */
+  text-align: center; /* Align text within the container */
 }
 
 .LLMChatMessagesContainer {
-  height: 90%;
+  height: auto; /* Removed fixed height */
+  flex-grow: 1;
   overflow-y: auto;
 }
 
 .LLMChatInputContainer {
   display: flex;
+  flex-shrink: 0;
 }
 
 .LLMChatInputTextBox {
@@ -62,18 +87,18 @@
 }
 
 .userMessage {
-  color: blue; 
+  color: blue;
 }
 
 .botMessage {
-  color: red; 
+  color: red;
 }
 
 .LLMChatLoaderContainer {
   display: flex;
-  justify-content: center; // Center horizontally
-  align-items: center; // Center vertically
-  height: 100%; // Adjust as needed to fill the chat window or parent container
+  justify-content: center;
+  align-items: center;
+  height: 100%;
 }
 
 .loader {
