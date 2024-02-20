@@ -42,6 +42,7 @@ const LLMChat = (props) => {
     // Closing
     if (LLMInput.length == 0) {
       console.log("closing or just opening");
+      setMessages([]);
     }
   }, [LLMInput, threadId]);
 

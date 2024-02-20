@@ -25,13 +25,8 @@
   cursor: pointer;
   width: auto;
   display: flex;
-  margin-left: 20px;
   flex-shrink: 0;
   margin-bottom: 10px;
-  > div {
-      margin-left: 5px;
-      font-size: 18px;
-  }
   justify-content: space-between;
 }
 
@@ -57,7 +52,6 @@
 }
 
 .qaBotTitle {
-  margin-left: 10px; /* Adjust spacing as needed */
   font-size: 18px; /* Adjust font size as needed */
   font-weight: bold; /* Optional: makes it bold */
   color: #333; /* Adjust color as needed */

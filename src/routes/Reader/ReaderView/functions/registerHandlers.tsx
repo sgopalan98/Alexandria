@@ -104,7 +104,7 @@ export default (renditionInstance:Rendition, view:number)=>{
 
   const scrollEventsHandler = (event) =>{
     // Prevent flipping pages when scrolling on valid elements
-    if(sidebarOpen || ThemeMenuActive || NoteModalVisible || DictionaryWord || (viewMode == "continuous") || footnoteActive) return
+    if(sidebarOpen || ThemeMenuActive || NoteModalVisible || DictionaryWord || LLMInput || (viewMode == "continuous") || footnoteActive) return
 
     if(selectedRendition != view) return
 
@@ -135,10 +135,12 @@ export default (renditionInstance:Rendition, view:number)=>{
       return
     }
 
-    if (event.keyCode == 40 || event.keyCode == 39) {
+    // TODO: Is this the best way
+    // If QABot windopw is active, then, don;'t do anything
+    if (!LLMInput && (event.keyCode == 40 || event.keyCode == 39)) {
       renditionInstance.next()
     }
-    if (event.keyCode == 37 || event.keyCode == 38) {
+    if (!LLMInput && (event.keyCode == 37 || event.keyCode == 38)) {
       renditionInstance.prev()
     }
     if(event.ctrlKey && event.keyCode == 66){

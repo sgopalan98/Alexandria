@@ -8,13 +8,13 @@
 // https://users.rust-lang.org/t/add-unstable-feature-only-if-compiled-on-nightly/27886
 #![cfg_attr(feature = "opt_once_cell", feature(once_cell))]
 use std::{
-    collections::{HashMap, HashSet}, env::{self, current_dir}, fs::{self, File}, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::{Mutex, RwLock}
+    collections::{HashMap, HashSet}, env::{self, current_dir}, fs::{self, File}, io::{BufReader, Read, Write}, path::{Path, PathBuf}, str::FromStr, sync::{Mutex, RwLock}
 };
 
 use epub::doc::EpubDoc;
 use libmobi_rs::convertToEpubWrapper;
 use log::{debug, info};
-use pandoc::{OutputKind, Pandoc};
+use pandoc::{OutputKind, Pandoc, PandocOption};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -505,6 +505,7 @@ fn convert_epub_to_pdf(epub_path: &str, hashed_book_folder: &PathBuf, book_name:
     pandoc.add_input(epub_path);
     let pdf_name = book_name.to_string() + ".pdf";
     let pdf_path = hashed_book_folder.join(pdf_name);
+    pandoc.add_option(PandocOption::PdfEngine(PathBuf::from_str("xelatex").unwrap()));
     pandoc.set_output(OutputKind::File(pdf_path.clone()));
     pandoc.execute()?;
     return Ok(pdf_path);
@@ -541,6 +542,10 @@ fn get_books() -> Vec<BookHydrate> {
     // TODO: There is a bug here in MacOS where .DS_Store is being read as a book hash
     for hashed_book_folder in hashed_book_folders {
         let hashed_book_folder = &hashed_book_folder.unwrap();
+
+        if hashed_book_folder.metadata().unwrap().is_dir() {
+            continue;
+        }
 
         let file_hash = &hashed_book_folder.path();
         let file_hash = file_hash.file_name().unwrap();
