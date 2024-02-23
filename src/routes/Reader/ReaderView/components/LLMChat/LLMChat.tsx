@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 import { Message } from './LLMChatTypes';
 import { SetLLMInput } from '@store/slices/appState';
 import LeftArrow from '@resources/feathericons/arrow-left.svg'
+import SendIcon from '@resources/iconmonstr/iconmonstr-send-3.svg'
 
 const LLMChat = (props) => {
   
@@ -13,6 +14,7 @@ const LLMChat = (props) => {
   // TODO: Should LLMInput be lowercase?
   const LLMInput = useAppSelector((state) => state.appState.state.LLMInput);
   const qaBotId = useAppSelector((state) => state.appState.qaBotId);
+  // TODO: Input value is not right
   const [inputValue, setInputValue] = useState('');
   // State variables for loading
   const [isThreadCreating, setIsThreadCreating] = useState(false);
@@ -28,6 +30,21 @@ const LLMChat = (props) => {
     setInputValue(e.target.value);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    console.log("Key pressed", e.key);
+    
+    if (e.key === 'Enter' && !e.shiftKey) {
+      console.log("The input value is", inputValue);
+      console.log("the input value length is ", inputValue.length);
+      e.preventDefault();
+      if (!isAnswerLoading && !isThreadCreating && inputValue.length > 0) {
+        console.log("Sending message");
+        handleSendMessage();
+      }
+    }
+  };
+
+
   useEffect(() => {
     console.log("The chosen passage is", LLMInput);
     // Opening
@@ -41,6 +58,7 @@ const LLMChat = (props) => {
     }
     // Closing
     if (LLMInput.length == 0) {
+      setInputValue('');
       console.log("closing or just opening");
       setMessages([]);
     }
@@ -61,13 +79,14 @@ const LLMChat = (props) => {
       setInputValue('');
       try {
         // TODO: Why am I not doing promise chaining here?
+        console.log("GOT EXECUTED with", inputValue);
         const response = await invoke('llm_answer_question', {
           context: LLMInput,
           question: inputValue,
           threadId: threadId
         });
 
-        // Assuming the response is a string. Adjust based on actual response structure.
+        // // Assuming the response is a string. Adjust based on actual response structure.
         const qaBotResponse = "QABot: " + response;
         setMessages(prevMessages => [...prevMessages, { text: qaBotResponse, sender: 'QABot' }]);
       } catch (error) {
@@ -123,11 +142,11 @@ const LLMChat = (props) => {
                     <textarea
                       value={inputValue}
                       onChange={handleInputChange}
+                      onKeyDown={handleKeyDown}
                       className={styles.LLMChatInputTextBox}
                       placeholder="Ask a question..." />
-                    <button onClick={handleSendMessage} className={styles.LLMChatInputSendButton}>
-                      Send
-                    </button>
+                    
+                    <SendIcon onClick={handleSendMessage} className={styles.LLMChatInputSendIcon} />
                   </div>
               </>)
           }</>

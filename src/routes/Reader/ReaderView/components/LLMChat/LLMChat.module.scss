@@ -69,15 +69,23 @@
 .LLMChatInputContainer {
   display: flex;
   flex-shrink: 0;
+  align-items: center;
 }
 
 .LLMChatInputTextBox {
-  flex: 4;
+  // flex: 13;
+  flex-grow: 1; /* Takes up remaining space */
   overflow-y: auto;
 }
 
-.LLMChatInputSendButton {
-  flex: 1;
+.LLMChatInputSendIcon {
+  flex: none; /* Adjust this as needed */
+  display: flex; /* Use Flexbox for the icon itself */
+  justify-content: center; /* Centers horizontally within the flex item */
+  align-items: center; /* Centers vertically within the flex item */
+  cursor: pointer; /* Changes the cursor to a pointer on hover */
+  margin-left: 10px;
+  margin-right: 10px;
 }
 
 .userMessage {

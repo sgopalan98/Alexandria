@@ -176,15 +176,15 @@ async fn create_assistant(api_key: String, shared_state: State<'_, SharedState>)
     let query = [("limit", "20")];
     let assistants = client.assistants().list(&query).await.unwrap();
     println!("Assistants: {:#?}", assistants);
-    let novelgpt_assistant = assistants.data.iter().find(|assistant| assistant.name.as_ref().unwrap() == "Novel GPT Alexandria");
+    let novelgpt_assistant = assistants.data.iter().find(|assistant| assistant.name.as_ref().unwrap() == "Book GPT Alexandria");
     let novelgpt_assistant = match novelgpt_assistant {
         Some(assistant) => {
             assistant.clone()
         },
         None => {
             let assistant_request = CreateAssistantRequestArgs::default()
-            .name("Novel GPT Alexandria")
-            .model("gpt-4-turbo-preview")
+            .name("Book GPT Alexandria")
+            .model("gpt-3.5-turbo-0125")
             .instructions("You are a Novel answering chatbot with access to the books in which questions are asked. Use your knowledge base to best respond to the questions.")
             .tools(vec![AssistantTools::Retrieval(AssistantToolsRetrieval::default())])
             .build().unwrap();
@@ -543,7 +543,7 @@ fn get_books() -> Vec<BookHydrate> {
     for hashed_book_folder in hashed_book_folders {
         let hashed_book_folder = &hashed_book_folder.unwrap();
 
-        if hashed_book_folder.metadata().unwrap().is_dir() {
+        if !hashed_book_folder.metadata().unwrap().is_dir() {
             continue;
         }
 
@@ -1178,30 +1178,6 @@ async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, m
     return Ok("Result not found".to_string());
 }
 
-async fn get_or_create_novelgpt_assistant(client: &Client<OpenAIConfig>) -> Result<AssistantObject, Box<dyn Error>>{
-    println!("Querying for assistants...");
-    let query = [("limit", "20")];
-    let assistants = client.assistants().list(&query).await?;
-    println!("Assistants: {:#?}", assistants);
-    let novelgpt_assistant = assistants.data.iter().find(|assistant| assistant.name.as_ref().unwrap() == "Novel GPT Alexandria");
-    let novelgpt_assistant = match novelgpt_assistant {
-        Some(assistant) => {
-            assistant.clone()
-        },
-        None => {
-            let assistant_request = CreateAssistantRequestArgs::default()
-            .name("Novel GPT Alexandria")
-            .model("gpt-4-turbo-previous")
-            .instructions("You are a Novel answering chatbot with access to the books in which questions are asked. Use your knowledge base to best respond to the questions.")
-            .tools(vec![AssistantTools::Retrieval(AssistantToolsRetrieval::default())])
-            .build()?;
-            let assistant = client.assistants().create(assistant_request).await?;
-            assistant
-        }
-    };
-    println!("NovelGPT Assistant {:#?}", novelgpt_assistant);
-    Ok(novelgpt_assistant)
-}
 
 async fn get_or_create_book_file(client: &Client<OpenAIConfig>, book_name: &str) -> Result<String, Box<dyn Error>> {
     let query = [("limit", "20")];
