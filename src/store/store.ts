@@ -51,7 +51,7 @@ const store =  configureStore({
         ignoredPaths: ['bookState.0.instance', 'bookState.1.instance', 'bookState.0.data.bookmarks', 'bookState.1.data.bookmarks']
       },
     }).concat(storeAPI => next => action => {
-      
+      console.log('dispatching', action);
       next(action)
       if(SyncedDataActions.has(action.type)){
         const currentState:RootState = storeAPI.getState()
@@ -105,9 +105,6 @@ const store =  configureStore({
       }else{
         console.log("Warning: Action Unsaved: ", action.type)
       }
-
-
-
     }),
 })
 

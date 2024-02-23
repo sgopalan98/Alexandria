@@ -1,0 +1,11 @@
+appenders:
+  file:
+    kind: file
+    path: "./Alexandria.log"
+    encoder:
+      pattern: "{d} - {l} - {m}\n"
+
+root:
+  level: debug
+  appenders:
+    - file

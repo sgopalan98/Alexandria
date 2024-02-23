@@ -41,6 +41,7 @@ const Home = () =>{
   const renditionInstance = useAppSelector((state) => state.bookState[selectedRendition]?.instance)
   const bookmarks = useAppSelector((state) => state.bookState[selectedRendition]?.data.bookmarks)
   const displayedCFI = useAppSelector((state) => state.bookState[selectedRendition]?.data.cfi)
+  const qaBotId = useAppSelector((state) => state.appState.qaBotId)
   
   const [isPageBookmarked, setPageBookmarked] = useState(false)
   const [isFullScreen, setIsFullScreen] = useState(false)
@@ -106,21 +107,23 @@ const Home = () =>{
   useEffect(()=>{
     // TODO: Why is it bookHash1? Lol chumma copy paste...
     console.log("The book hash is " + params.bookHash1);
-    invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
-      setPdfExists(true);
-      // TODO: SERIOUSLY? That is your function name??
-      invoke('upload_file_and_create_thread_llm', { bookHash: params.bookHash1 }).then((response) => {
-        console.log("Thread created successfully");
-        setThreadId(response.threadId);
-        setFileId(response.fileId);
-        console.log("Setting threadId to " + response.threadId);
-        console.log("Setting fileId to " + response.fileId);
+    if (qaBotId.length != 0) {
+      invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
+        setPdfExists(true);
+        // TODO: SERIOUSLY? That is your function name??
+        invoke('upload_file_and_create_thread_llm', { bookHash: params.bookHash1 }).then((response) => {
+          console.log("Thread created successfully");
+          setThreadId(response.threadId);
+          setFileId(response.fileId);
+          console.log("Setting threadId to " + response.threadId);
+          console.log("Setting fileId to " + response.fileId);
+        }).catch((error) => {
+          console.log("error in upload_file_and_create_thread_llm");
+        });
       }).catch((error) => {
-        console.log("error in upload_file_and_create_thread_llm");
-      });
-    }).catch((error) => {
-      console.log("error in check_pdf_exists");
-    })
+        console.log("error in check_pdf_exists");
+      })
+    }
 
 
     return ()=>{
@@ -137,7 +140,7 @@ const Home = () =>{
         });
       }
     }
-  }, [])
+  }, [qaBotId]);
 
   useEffect(()=>{
     if(!bookmarks){

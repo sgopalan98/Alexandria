@@ -102,7 +102,9 @@ async fn main() {
 
             create_or_load_data();
 
-            env_logger::init();
+            // env_logger::init();
+            // TODO: This should be rather bundled in resources
+            log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
             debug!("LOGGER INIT DONE");
             // https://github.com/tranxuanthang/lrcget/commit/0a2fe9943e40503a1dc5d9bf291314f31ea66941
             // https://github.com/tauri-apps/tauri/issues/3725#issuecomment-1552804332
@@ -192,6 +194,7 @@ async fn create_assistant(api_key: String, shared_state: State<'_, SharedState>)
             assistant
         }
     };
+    debug!("NovelGPT Assistant {:#?}", novelgpt_assistant.clone());
     println!("NovelGPT Assistant {:#?}", novelgpt_assistant);
     
     // Update settings.json with the assistant id
@@ -439,6 +442,7 @@ struct ThreadDetails {
 }
 #[tauri::command]
 async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<'_, SharedState>) -> Result<ThreadDetails, String> {
+    debug!("Received request to upload file and create thread for book {:?}", book_hash);
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
     let config = OpenAIConfig::new().with_api_key(api_key.clone());
     let client = Client::with_config(config);
@@ -466,15 +470,15 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
     .file(FileInput::from_bytes(pdf_path, bytes))
     .purpose("assistants")
     .build().unwrap();
-    info!("Open AI: File upload started");
+    debug!("Open AI: File upload started");
     let file = client.files().create(file_request).await.unwrap();
     let file_id = file.id;
-    info!("Open AI: File upload finished");
+    debug!("Open AI: File upload finished");
     // Create thread
     debug!("Open AI: Creating thread");
     let thread_request = CreateThreadRequestArgs::default().build().unwrap();
     let thread = client.threads().create(thread_request.clone()).await.unwrap();
-    debug!("Open AI: Thread created");
+    debug!("Open AI: Thread created with thread id: {}", thread.id.clone());
 
     let initial_message = CreateMessageRequestArgs::default()
     .role("user")
@@ -495,7 +499,7 @@ async fn delete_thread(thread_id: &str, file_id: &str, shared_state: State<'_, S
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
     let config = OpenAIConfig::new().with_api_key(api_key.clone());
     let client = Client::with_config(config);
-    println!("deleting the file");
+    debug!("Open AI: Deleting file: {}", file_id);
     let response = client.files().delete(file_id).await.unwrap();
     return Ok("Deleted! Please verify".to_string());
 }
@@ -1029,15 +1033,15 @@ fn set_settings(payload: HashMap<String, String>, shared_state: State<'_, Shared
     let reader = BufReader::new(file);
 
     let json: serde_json::Value =
-        serde_json::from_reader(reader).expect("JSON was not well-formatted");
-        println!("PRINTING GET SETTINGS: {:?}", json);
+    serde_json::from_reader(reader).expect("JSON was not well-formatted");
+        
     let mut payload: SettingsConfig = serde_json::from_value(json).unwrap();
     *shared_state.settings.lock().unwrap() = payload;
 }
 
 #[tauri::command]
 fn get_settings() -> SettingsConfig {
-
+    println!("making sure that problem is not here");
     let file = File::open(get_config_path().join("settings.json")).unwrap();
 
     let reader = BufReader::new(file);
@@ -1059,6 +1063,7 @@ fn get_config_path_js() -> String {
 // TODO: Why can I not set Resut<String, Error> here?
 #[tauri::command]
 async fn llm_answer_question(threadId: &str, context: String, question: String, shared_state: State<'_, SharedState>) -> Result<String, String>{
+    debug!("Open AI: Question asked with context: {}, question: {}", context.clone(), question.clone());
     // Ask the actual question
     let question = format!("Context: {}, Question: {}", context, question);
     let message = CreateMessageRequestArgs::default()
@@ -1070,7 +1075,9 @@ async fn llm_answer_question(threadId: &str, context: String, question: String, 
     let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
     // FIXME: Cloning and sending will cause concurrency issues. Just making it work
-    answer_question(assistant_id.as_str(), api_key, threadId, message).await
+    let result = answer_question(assistant_id.as_str(), api_key, threadId, message).await;
+    debug!("Open AI: Question answered with answer: {}", result.clone().unwrap());
+    return result;
 }
 
 // TODO: Change this to _llm_answer_question
