@@ -6,6 +6,7 @@ import Router from "./routes/Router";
 import 'sanitize.css';
 import 'sanitize.css/forms.css';
 import 'sanitize.css/typography.css';
+import 'react-tooltip/dist/react-tooltip.css';
 // import './utils/styles/breakpoints.css'
 
 import store from './store/store'

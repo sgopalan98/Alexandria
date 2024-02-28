@@ -149,7 +149,8 @@ async fn main() {
             create_assistant,
             check_pdf_exists,
             upload_file_and_create_thread_llm,
-            delete_thread
+            delete_thread,
+            delete_assistant
         ])
         .run(tauri::generate_context!()) // Create a ../dist folder if it there is an error on this line
         .expect("error while running tauri application");
@@ -395,7 +396,13 @@ fn import_book(payload: String) -> Result<BookHydrate, String> {
     // TODO: Is this the correct condition to check if the book is ePub?
     // TODO: Is the false value correct? What is PathBuf::new() as a string?
     let pdf_url = match is_parsable {
-        true => convert_epub_to_pdf(bookLocation.to_str().unwrap(), &hashed_book_folder, &file_stem_unwrapped).unwrap(),
+        true => match convert_epub_to_pdf(bookLocation.to_str().unwrap(), &hashed_book_folder, &file_stem_unwrapped){
+            Ok(pdf_path) => pdf_path,
+            Err(e) => {
+                println!("Error: {}", e);
+                PathBuf::new()
+            }
+        },
         false => PathBuf::new()
     };
 
@@ -451,7 +458,6 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
     let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
     
     // Get pdf path from the book_hash folder
-
     let hashed_book_folder = get_config_path().join("books").join(format!("{book_hash}"));
     let book_folder = fs::read_dir(&hashed_book_folder).unwrap();
     let mut pdf_path = "".to_string();
@@ -463,6 +469,10 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
         }
     }
 
+    if (pdf_path.len() == 0) {
+        return Err("Error: PDF not found".to_string());
+    }
+
     // Upload file
     let file_contents = fs::read(pdf_path.clone()).unwrap();
     let bytes = bytes::Bytes::from(file_contents);
@@ -471,13 +481,48 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
     .purpose("assistants")
     .build().unwrap();
     debug!("Open AI: File upload started");
-    let file = client.files().create(file_request).await.unwrap();
+    let attempts_left = 3;
+    // Try uploading the file three times. If it fails all three times, return an error
+    let mut attempts_left = 3;
+    let file = loop {
+        attempts_left -= 1;
+        if attempts_left == 0 {
+            return Err("Error: File upload failed".to_string());
+        }
+        let file_upload_result = client.files().create(file_request.clone()).await;
+        match file_upload_result {
+            Ok(file) => {
+                break file;
+            },
+            Err(e) => {
+                debug!("Open AI: File upload failed. Retrying. Attempts left: {}", attempts_left);
+                attempts_left -= 1;
+            }
+        }
+    };
     let file_id = file.id;
     debug!("Open AI: File upload finished");
     // Create thread
     debug!("Open AI: Creating thread");
     let thread_request = CreateThreadRequestArgs::default().build().unwrap();
-    let thread = client.threads().create(thread_request.clone()).await.unwrap();
+    let mut attempts_left = 3;
+    let thread = loop {
+        attempts_left -= 1;
+        if attempts_left == 0 {
+            return Err("Error: Thread creation failed".to_string());
+        }
+        let thread_creation_result = client.threads().create(thread_request.clone()).await;
+        match thread_creation_result {
+            Ok(thread) => {
+                break thread;
+            },
+            Err(e) => {
+                debug!("Open AI: Thread creation failed. Retrying. Attempts left: {}", attempts_left);
+                attempts_left -= 1;
+            }
+        }
+    };
+    
     debug!("Open AI: Thread created with thread id: {}", thread.id.clone());
 
     let initial_message = CreateMessageRequestArgs::default()
@@ -486,8 +531,13 @@ async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<
     .file_ids(vec![file_id.clone()])
     .build().unwrap();
 
-    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
-    answer_question(assistant_id.as_str(), api_key , thread.id.as_str(), initial_message).await;
+    match answer_question(assistant_id.as_str(), api_key , thread.id.as_str(), initial_message).await {
+        Ok(_) => {},
+        Err(e) => {
+            return Err(format!("Error: {}", e));
+        }
+    }
+    
     Ok(ThreadDetails {
         threadId: thread.id,
         fileId: file_id
@@ -535,7 +585,21 @@ struct BookHydrate {
     modified: u64
 }
 
-
+#[tauri::command]
+async fn delete_assistant(shared_state: State<'_, SharedState>) -> Result<String, String> {
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let assistant_id = &shared_state.settings.lock().unwrap().qaBotId.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+    match client.assistants().delete(assistant_id).await {
+        Ok(_) => {
+            return Ok("Deleted".to_string());
+        },
+        Err(e) => {
+            return Err(format!("Error: {}", e));
+        }
+    };
+}
 
 #[tauri::command]
 fn get_books() -> Vec<BookHydrate> {

@@ -1,4 +1,4 @@
-import React from 'react'; // we need this to make JSX compile
+import React, { useEffect, useState } from 'react'; // we need this to make JSX compile
 
 
 import {
@@ -20,21 +20,34 @@ import { Rendition } from '@btpf/epubjs';
 import toast from 'react-hot-toast';
 import { writeText } from '@tauri-apps/api/clipboard';
 import { MoveNoteModal, MoveQuickbarModal, SelectSidebarMenu, SetDictionaryWord, SetLLMInput, SetModalCFI, ShowNoteModal } from '@store/slices/appState';
-
+import { invoke } from '@tauri-apps/api';
+import { useParams } from 'react-router-dom';
+import { Tooltip } from 'react-tooltip';
 
 const COLORS = ['#FFD600', 'red', 'orange','#00FF29', 'cyan']
 
 
-const QuickbarModal = () =>{
+const QuickbarModal = (props) =>{
+  const params = useParams();
+  const [pdfExists, setPdfExists] = useState(false)
+
   const selectedRendition = useAppSelector((state) => state.appState.state.selectedRendition)
   const quickbarModalVisible = useAppSelector((state) => state?.appState?.state?.modals.quickbarModal.visible)
   const modalX = useAppSelector((state) => state?.appState?.state?.modals.quickbarModal.x)
   const modalY = useAppSelector((state) => state?.appState?.state?.modals.quickbarModal.y)
   const selectedCFI = useAppSelector((state) => state?.appState?.state?.modals.selectedCFI)
   const renditionInstance:Rendition = useAppSelector((state) => state.bookState[selectedRendition]?.instance)
+  const qaBotId = useAppSelector((state) => state.appState.qaBotId)
+  const {isQABotLoading} = props;
+  console.log("isQABotLoading", isQABotLoading);
 
-
-
+  useEffect(() => {
+    if (qaBotId.length > 0) {
+      invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
+        setPdfExists(true);
+      })
+    }
+  }, [qaBotId])
 
   const dispatch = useAppDispatch()
   if(quickbarModalVisible){
@@ -48,7 +61,8 @@ const QuickbarModal = () =>{
       console.log("Quickbar Crash prevented")
       return (<></>)
     }
-    const showDict = !result.includes(" ")
+    const showDict = !result.includes(" ");
+    const isChatGPTDisabled = qaBotId.length === 0 || !pdfExists;
     return(
       <>
         <div className={styles.container} style={{top:modalY, left: modalX, width: QUICKBAR_MODAL_WIDTH, height: QUICKBAR_MODAL_HEIGHT}}>
@@ -79,17 +93,42 @@ const QuickbarModal = () =>{
               }))
 
             }}/></div>
-            <div><ChatGPT onClick={()=>{
-              console.log("About to call Chat GPT with", result)
-              dispatch(SetLLMInput(result))
-              renditionInstance.annotations.remove(selectedCFI, "highlight")
-              dispatch(MoveQuickbarModal({
-                view: 0,
-                x:0,
-                y:0,
-                visible: false
-              }))
-            }}/></div>
+            <Tooltip id="my-tooltip" className={styles.customTooltip}/>
+            <div>
+              { qaBotId.length > 0 ? ( pdfExists ? 
+                  (<ChatGPT 
+                      onClick={()=>{
+                        if (isQABotLoading) {
+                          toast.loading("QABot is loading. Please wait a few seconds. :)")
+                          return;
+                        }
+                        console.log("About to call Chat GPT with", result)
+                        dispatch(SetLLMInput(result))
+                        renditionInstance.annotations.remove(selectedCFI, "highlight")
+                        dispatch(MoveQuickbarModal({
+                          view: 0,
+                          x:0,
+                          y:0,
+                          visible: false
+                        }))}}
+                  />)
+                    :
+                    (<ChatGPT 
+                      data-tooltip-id="my-tooltip"
+                      data-tooltip-content="QA Bot unavailable for this book"
+                      data-tooltip-place="right-start"
+                      />
+                    )
+                  )
+                
+                : (<ChatGPT
+                  data-tooltip-id="my-tooltip"
+                  data-tooltip-content="QA Bot is not enabled"
+                  data-tooltip-place="top"
+                  />
+                  )
+              }
+            </div>
             <div onClick={()=>{
               dispatch(SelectSidebarMenu("Search#" + result))
               renditionInstance.annotations.remove(selectedCFI, "highlight")
@@ -143,7 +182,7 @@ const QuickbarModal = () =>{
 
 
             })}
-  
+
           </div>
         </div>
       </>

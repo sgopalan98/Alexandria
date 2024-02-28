@@ -43,9 +43,11 @@
   // border: 1px solid black;
   cursor:pointer;
 }
-  
-  
-  
-  
-  
-  
+
+.customTooltip {
+  width: 20vw; // 20% of the viewport width
+  min-width: 150px; // Minimum width
+  max-width: 300px; // Maximum width
+  padding: 1vh 1vw; // Padding based on viewport size
+  // ... other styles ...
+}

@@ -8,7 +8,7 @@ import GlobalTheme from "./pages/GlobalTheme"
 import Fonts from "./pages/Fonts/Fonts"
 import TitleBarButtons from "@shared/components/TitleBarButtons"
 import About from "./pages/About"
-import QABot from "./pages/QABot"
+import QABot from "./pages/QABot/QABot"
 
 const Settings = (props:any)=>{
   const navigate = useNavigate()

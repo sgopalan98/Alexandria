@@ -31,6 +31,7 @@ import FooterBar from './FooterBar/FooterBar'
 import { platform } from '@tauri-apps/api/os';
 import LLMChat from './ReaderView/components/LLMChat/LLMChat'
 import { invoke } from '@tauri-apps/api'
+import toast, {Toaster} from 'react-hot-toast'
 
 const Home = () =>{
   const selectedRendition:number = useAppSelector((state) => state.appState.state.selectedRendition)
@@ -50,6 +51,7 @@ const Home = () =>{
   const [pdfExists, setPdfExists] = useState(false)
   const [threadId, setThreadId] = useState('')
   const [fileId, setFileId] = useState('')
+  const [isQABotLoading, setIsQABotLoading] = useState(false)
 
   const threadIdRef = useRef(threadId);
   const fileIdRef = useRef(fileId);
@@ -110,17 +112,30 @@ const Home = () =>{
     if (qaBotId.length != 0) {
       invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
         setPdfExists(true);
+        setIsQABotLoading(true);
         // TODO: SERIOUSLY? That is your function name??
         invoke('upload_file_and_create_thread_llm', { bookHash: params.bookHash1 }).then((response) => {
           console.log("Thread created successfully");
           setThreadId(response.threadId);
           setFileId(response.fileId);
+          toast.dismiss();
+          setIsQABotLoading(false);
           console.log("Setting threadId to " + response.threadId);
           console.log("Setting fileId to " + response.fileId);
         }).catch((error) => {
-          console.log("error in upload_file_and_create_thread_llm");
+          setIsQABotLoading(false);
+          setPdfExists(false);
+          toast.dismiss();
+          const toastId = toast.error("Sorry the QABot service is down now :(. Please try after some time!");
+          setTimeout(() => {
+            toast.dismiss(toastId);
+          }, 5000);
         });
       }).catch((error) => {
+        const toastId = toast.error("Error: QABot won’t work for this book! Please create an issue at https://github.com/btpf/Alexandria");
+        setTimeout(() => {
+          toast.dismiss(toastId);
+        }, 5000);
         console.log("error in check_pdf_exists");
       })
     }
@@ -242,7 +257,7 @@ const Home = () =>{
         {isDualReaderMode?<ReaderView view={!dualReaderReversed?1:0} contributesMountPoint={1} bookHash={params.bookHash2}/>:<></>}
       </div>
 
-      <QuickbarModal/>
+      <QuickbarModal isQABotLoading={isQABotLoading}/>
       <NoteModal/>
       <div onMouseLeave={()=>setMouseOverMenu(false)} onMouseOver={()=>setMouseOverMenu(true)} className={`${styles.readerFooterBar}  ${!showMenuUi && styles.optionsToggled}`}>
         <div onClick={()=>renditionInstance?.prev()} className={`${styles.arrowButtonContainer}`}>
@@ -271,7 +286,12 @@ const Home = () =>{
       <Dictionary/>
       <LLMChat threadId={threadId} pdfExists={pdfExists} fileId={fileId}/>
 
-
+      <Toaster
+        containerStyle={{top:60}}
+        position="top-right"
+        style={{PointerEvent:"none"}}
+        reverseOrder={false}
+      />
       <div onClick={()=>{
 
         if(sidebarOpen){
