@@ -48,13 +48,8 @@ const Home = () =>{
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [mouseOverMenu, setMouseOverMenu] = useState(false)
   const [currentPage, setCurrentPage] = useState('')
-  const [pdfExists, setPdfExists] = useState(false)
-  const [threadId, setThreadId] = useState('')
-  const [fileId, setFileId] = useState('')
+  const [isQAEnabledForBook, setIsQAEnabledForBook] = useState(false)
   const [isQABotLoading, setIsQABotLoading] = useState(false)
-
-  const threadIdRef = useRef(threadId);
-  const fileIdRef = useRef(fileId);
 
 
   // Temporary Bug Fix: This is used as a fix for a Windows 11 tauri bug:
@@ -95,65 +90,39 @@ const Home = () =>{
       }
     }
 
-  }, [renditionInstance])
-
-
-  useEffect(() => {
-    threadIdRef.current = threadId; // Update ref whenever threadId changes
-  }, [threadId]);
-
-  useEffect(() => {
-    fileIdRef.current = fileId; // Update ref whenever fileId changes
-  }, [fileId]);
+  }, [renditionInstance]);
   
   useEffect(()=>{
     // TODO: Why is it bookHash1? Lol chumma copy paste...
     console.log("The book hash is " + params.bookHash1);
     if (qaBotId.length != 0) {
-      invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
-        setPdfExists(true);
-        setIsQABotLoading(true);
-        // TODO: SERIOUSLY? That is your function name??
-        invoke('upload_file_and_create_thread_llm', { bookHash: params.bookHash1 }).then((response) => {
-          console.log("Thread created successfully");
-          setThreadId(response.threadId);
-          setFileId(response.fileId);
-          toast.dismiss();
-          setIsQABotLoading(false);
-          console.log("Setting threadId to " + response.threadId);
-          console.log("Setting fileId to " + response.fileId);
-        }).catch((error) => {
-          setIsQABotLoading(false);
-          setPdfExists(false);
-          toast.dismiss();
-          const toastId = toast.error("Sorry the QABot service is down now :(. Please try after some time!");
+      setIsQABotLoading(true);
+      invoke('enable_qa_for_book', { bookHash: params.bookHash1 }).then((response) => {
+        console.log("QA enabled for this book");
+        setIsQAEnabledForBook(true);
+      }).catch((error) => {
+        console.error("QA not enabled for this book");
+        setIsQAEnabledForBook(false);
+        const toastId = toast.error("Sorry the QABot service is down now :(. Please try after some time!");
           setTimeout(() => {
             toast.dismiss(toastId);
           }, 5000);
-        });
-      }).catch((error) => {
-        const toastId = toast.error("Error: QABot won’t work for this book! Please create an issue at https://github.com/btpf/Alexandria");
-        setTimeout(() => {
-          toast.dismiss(toastId);
-        }, 5000);
-        console.log("error in check_pdf_exists");
-      })
+      }).finally(() => {
+        // TODO: TOAST COMING from somewhere else
+        toast.dismiss();
+        setIsQABotLoading(false);
+      });
     }
 
 
     return ()=>{
       console.log("Unmounting");
-      const currentThreadId = threadIdRef.current;
-      const currentFileId = fileIdRef.current;
-      console.log("The thread id is " + currentThreadId);
-      if(currentThreadId.length > 0){
-        console.log("Deleting thread");
-        invoke('delete_thread', { threadId: currentThreadId, fileId: currentFileId }).then((response) => {
-          console.log("Deleted :)")
-        }).catch((error) => {
-          console.log("error in close_thread");
-        });
-      }
+      console.log("Deleting thread");
+      invoke('delete_file').then((response) => {
+        console.log("Deleted :)")
+      }).catch((error) => {
+        console.log("error in close_thread");
+      });
     }
   }, [qaBotId]);
 
@@ -257,7 +226,7 @@ const Home = () =>{
         {isDualReaderMode?<ReaderView view={!dualReaderReversed?1:0} contributesMountPoint={1} bookHash={params.bookHash2}/>:<></>}
       </div>
 
-      <QuickbarModal isQABotLoading={isQABotLoading}/>
+      <QuickbarModal isQABotLoading={isQABotLoading} isQAEnabledForBook={isQAEnabledForBook}/>
       <NoteModal/>
       <div onMouseLeave={()=>setMouseOverMenu(false)} onMouseOver={()=>setMouseOverMenu(true)} className={`${styles.readerFooterBar}  ${!showMenuUi && styles.optionsToggled}`}>
         <div onClick={()=>renditionInstance?.prev()} className={`${styles.arrowButtonContainer}`}>
@@ -284,7 +253,7 @@ const Home = () =>{
       <FooterBar/>
       <ProgressMenu/>
       <Dictionary/>
-      <LLMChat threadId={threadId} pdfExists={pdfExists} fileId={fileId}/>
+      <LLMChat isQAEnabledForBook={isQAEnabledForBook}/>
 
       <Toaster
         containerStyle={{top:60}}

@@ -19,9 +19,8 @@ const LLMChat = (props) => {
   // State variables for loading
   const [isThreadCreating, setIsThreadCreating] = useState(false);
   const [isAnswerLoading, setIsAnswerLoading] = useState(false);
-  // const [threadId, setThreadId] = useState('');
   const params = useParams();
-  const { threadId, pdfExists, fileId } = props;
+  const { qaBotEnabled } = props;
 
   const endOfMessagesRef = useRef(null);
   const dispatch = useAppDispatch();
@@ -50,10 +49,14 @@ const LLMChat = (props) => {
     // Opening
     if (LLMInput.length > 0) {
       if (qaBotId.length > 0) {
-        setIsThreadCreating(true); // Start loading
-        if(threadId.length > 0){
+        setIsThreadCreating(true); 
+        invoke('llm_create_thread').then((response) => {
+          console.log("Thread created", response);
+        }).catch((error) => {
+          
+        }).finally(() => {
           setIsThreadCreating(false);
-        }
+        });
       }
     }
     // Closing
@@ -62,7 +65,7 @@ const LLMChat = (props) => {
       console.log("closing or just opening");
       setMessages([]);
     }
-  }, [LLMInput, threadId]);
+  }, [LLMInput]);
 
   useEffect(() => {
     if (endOfMessagesRef.current) {
@@ -82,8 +85,7 @@ const LLMChat = (props) => {
         console.log("GOT EXECUTED with", inputValue);
         const response = await invoke('llm_answer_question', {
           context: LLMInput,
-          question: inputValue,
-          threadId: threadId
+          question: inputValue
         });
 
         // // Assuming the response is a string. Adjust based on actual response structure.
@@ -104,7 +106,7 @@ const LLMChat = (props) => {
     // If not, show nothing
       
       <div className={`${styles.LLMChatScrollContainer} ${!LLMInput && styles.LLMChatScrollContainerCollapsed}`}>
-        { qaBotId.length > 0 && pdfExists ?
+        { qaBotId.length > 0 && qaBotEnabled ?
         (<>
           <div className={styles.nav} onClick={()=>dispatch(SetLLMInput(""))}>
             <div className={styles.navBack}>
@@ -120,7 +122,7 @@ const LLMChat = (props) => {
             {LLMInput}
           </div>
 
-          {threadId.length == 0 || isAnswerLoading ? (
+          {isAnswerLoading ? (
             <div className={styles.LLMChatLoaderContainer}>
             <div className={styles.loader}>Loading...</div>
             </div>

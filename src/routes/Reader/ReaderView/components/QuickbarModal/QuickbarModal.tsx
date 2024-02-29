@@ -29,7 +29,6 @@ const COLORS = ['#FFD600', 'red', 'orange','#00FF29', 'cyan']
 
 const QuickbarModal = (props) =>{
   const params = useParams();
-  const [pdfExists, setPdfExists] = useState(false)
 
   const selectedRendition = useAppSelector((state) => state.appState.state.selectedRendition)
   const quickbarModalVisible = useAppSelector((state) => state?.appState?.state?.modals.quickbarModal.visible)
@@ -38,16 +37,8 @@ const QuickbarModal = (props) =>{
   const selectedCFI = useAppSelector((state) => state?.appState?.state?.modals.selectedCFI)
   const renditionInstance:Rendition = useAppSelector((state) => state.bookState[selectedRendition]?.instance)
   const qaBotId = useAppSelector((state) => state.appState.qaBotId)
-  const {isQABotLoading} = props;
+  const {isQABotLoading, isQAEnabledForBook} = props;
   console.log("isQABotLoading", isQABotLoading);
-
-  useEffect(() => {
-    if (qaBotId.length > 0) {
-      invoke('check_pdf_exists', { bookHash: params.bookHash1 }).then((response) => {
-        setPdfExists(true);
-      })
-    }
-  }, [qaBotId])
 
   const dispatch = useAppDispatch()
   if(quickbarModalVisible){
@@ -62,7 +53,7 @@ const QuickbarModal = (props) =>{
       return (<></>)
     }
     const showDict = !result.includes(" ");
-    const isChatGPTDisabled = qaBotId.length === 0 || !pdfExists;
+    const isChatGPTDisabled = qaBotId.length === 0 || !isQAEnabledForBook;
     return(
       <>
         <div className={styles.container} style={{top:modalY, left: modalX, width: QUICKBAR_MODAL_WIDTH, height: QUICKBAR_MODAL_HEIGHT}}>
@@ -95,7 +86,7 @@ const QuickbarModal = (props) =>{
             }}/></div>
             <Tooltip id="my-tooltip" className={styles.customTooltip}/>
             <div>
-              { qaBotId.length > 0 ? ( pdfExists ? 
+              { qaBotId.length > 0 ? ( isQAEnabledForBook ? 
                   (<ChatGPT 
                       onClick={()=>{
                         if (isQABotLoading) {
@@ -115,7 +106,7 @@ const QuickbarModal = (props) =>{
                     :
                     (<ChatGPT 
                       data-tooltip-id="my-tooltip"
-                      data-tooltip-content="QA Bot unavailable for this book"
+                      data-tooltip-content="QA Bot unavailable for this book :("
                       data-tooltip-place="right-start"
                       />
                     )
