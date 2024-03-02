@@ -17,10 +17,10 @@ const LLMChat = (props) => {
   // TODO: Input value is not right
   const [inputValue, setInputValue] = useState('');
   // State variables for loading
-  const [isThreadCreating, setIsThreadCreating] = useState(false);
-  const [isAnswerLoading, setIsAnswerLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorNotification, setErrorNotification] = useState('');
   const params = useParams();
-  const { qaBotEnabled } = props;
+  const { isQAEnabledForBook } = props;
 
   const endOfMessagesRef = useRef(null);
   const dispatch = useAppDispatch();
@@ -36,7 +36,7 @@ const LLMChat = (props) => {
       console.log("The input value is", inputValue);
       console.log("the input value length is ", inputValue.length);
       e.preventDefault();
-      if (!isAnswerLoading && !isThreadCreating && inputValue.length > 0) {
+      if (!isLoading && inputValue.length > 0) {
         console.log("Sending message");
         handleSendMessage();
       }
@@ -49,23 +49,28 @@ const LLMChat = (props) => {
     // Opening
     if (LLMInput.length > 0) {
       if (qaBotId.length > 0) {
-        setIsThreadCreating(true); 
-        invoke('llm_create_thread').then((response) => {
-          console.log("Thread created", response);
-        }).catch((error) => {
-          
-        }).finally(() => {
-          setIsThreadCreating(false);
-        });
+        startQABot();
       }
     }
     // Closing
     if (LLMInput.length == 0) {
+      stopQABot();
       setInputValue('');
       console.log("closing or just opening");
       setMessages([]);
     }
   }, [LLMInput]);
+
+  const stopQABot = async () => {
+    await invoke('stop_qa_bot', { id: qaBotId }).then((response) => {
+      console.log("QABot stopped", response);
+      setErrorNotification('');
+    }).catch((error) => {
+      setErrorNotification('Error stopped QABot: ' + error);
+    }).finally(() => {
+
+    });
+  };
 
   useEffect(() => {
     if (endOfMessagesRef.current) {
@@ -75,7 +80,7 @@ const LLMChat = (props) => {
 
   const handleSendMessage = async () => {
     if (inputValue.trim() !== '') {
-      setIsAnswerLoading(true); // Start loading
+      setIsLoading(true); // Start loading
       const userInput = "User: " + inputValue;
       const userMessage = { text: userInput, sender: 'User' };
       setMessages(prevMessages => [...prevMessages, userMessage]);
@@ -95,18 +100,38 @@ const LLMChat = (props) => {
         console.error('Error invoking llm_answer_question:', error);
         // Handle the error appropriately
       } finally {
-        setIsAnswerLoading(false); // Stop loading
+        setIsLoading(false); // Stop loading
       }
       setInputValue('');
     }
   };
+
+  const startQABot = async () => {
+    setIsLoading(true);
+    await invoke('start_qa_bot').then((response) => {
+      console.log("Thread created", response);
+      setErrorNotification('');
+    }).catch((error) => {
+      setErrorNotification('Error starting QABot thread; Please click generate');
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  };
+
+
+  const errorSection = errorNotification ? (
+    <div className={styles.errorNotification}>
+      {errorNotification}
+      <button type="button" onClick={messages.length > 0 ? handleSendMessage : startQABot}>Retry</button>
+    </div>
+  ) : null;
 
   return (
     // If qABotActive is true, show the chat component
     // If not, show nothing
       
       <div className={`${styles.LLMChatScrollContainer} ${!LLMInput && styles.LLMChatScrollContainerCollapsed}`}>
-        { qaBotId.length > 0 && qaBotEnabled ?
+        { qaBotId.length > 0 && isQAEnabledForBook ?
         (<>
           <div className={styles.nav} onClick={()=>dispatch(SetLLMInput(""))}>
             <div className={styles.navBack}>
@@ -122,7 +147,7 @@ const LLMChat = (props) => {
             {LLMInput}
           </div>
 
-          {isAnswerLoading ? (
+          {isLoading ? (
             <div className={styles.LLMChatLoaderContainer}>
             <div className={styles.loader}>Loading...</div>
             </div>

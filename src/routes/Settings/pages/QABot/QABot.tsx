@@ -114,7 +114,7 @@ const QABot = ()=>{
                     {isSubmitted && qaBotId.length === 0 && (
                         <span style={{ color: 'red' }} title={errorMessage}>✕</span>
                     )}
-                    <button onClick={handleSubmit}>Submit</button>
+                    <button type="button" onClick={handleSubmit}>Submit</button>
                 </div>
             )}
             <Toaster

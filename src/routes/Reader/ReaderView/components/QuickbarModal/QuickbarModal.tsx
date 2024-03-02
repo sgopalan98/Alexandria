@@ -86,7 +86,7 @@ const QuickbarModal = (props) =>{
             }}/></div>
             <Tooltip id="my-tooltip" className={styles.customTooltip}/>
             <div>
-              { qaBotId.length > 0 ? ( isQAEnabledForBook ? 
+              { qaBotId.length > 0 ? ( (isQABotLoading || isQAEnabledForBook) ? 
                   (<ChatGPT 
                       onClick={()=>{
                         if (isQABotLoading) {

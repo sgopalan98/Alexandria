@@ -83,6 +83,7 @@ const Home = () =>{
       const pageTurnHandler = (e:any)=>{
         setCurrentPage(e.end)
       }
+      console.log("DUMMY: rendition is", renditionInstance);
       renditionInstance.on("locationChanged", pageTurnHandler)
 
       return ()=>{
@@ -101,7 +102,7 @@ const Home = () =>{
         console.log("QA enabled for this book");
         setIsQAEnabledForBook(true);
       }).catch((error) => {
-        console.error("QA not enabled for this book");
+        console.error("QA cannot be enabled for the book. please check backend logs.");
         setIsQAEnabledForBook(false);
         const toastId = toast.error("Sorry the QABot service is down now :(. Please try after some time!");
           setTimeout(() => {
@@ -118,10 +119,10 @@ const Home = () =>{
     return ()=>{
       console.log("Unmounting");
       console.log("Deleting thread");
-      invoke('delete_file').then((response) => {
+      invoke('disable_qa_for_book').then((response) => {
         console.log("Deleted :)")
       }).catch((error) => {
-        console.log("error in close_thread");
+        console.log("error in delete thread");
       });
     }
   }, [qaBotId]);

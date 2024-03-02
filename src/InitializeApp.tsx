@@ -49,7 +49,6 @@ const InitializeApp = ({children}: JSX.ElementChildrenAttribute) =>{
                 console.log(bookHash)
               }
             }
-
             window.location.pathname = ("/reader/" + bookHash)
           }
         }

@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use axum::{
-    http::{HeaderValue, Method},
+    http::{response, HeaderValue, Method},
     routing::get,
     Router,
 };
@@ -45,7 +45,10 @@ static font_folder: OnceLock<PathBuf> = OnceLock::new();
 struct SharedState {
     openai_client: Mutex<Client<OpenAIConfig>>,
     settings: Mutex<SettingsConfig>,
-    assistant_id: Mutex<String>
+    // TODO: Maybe combine all assistants to a single struct
+    assistant_id: Mutex<String>,
+    current_file: Mutex<String>,
+    thread_id: Mutex<String>
 }
 
 
@@ -55,7 +58,7 @@ fn get_config_path() -> PathBuf{
 fn get_font_folder_path() -> PathBuf{
     return font_folder.get().unwrap().clone();
 }
-use async_openai::{config::OpenAIConfig, types::{AssistantObject, AssistantTools, AssistantToolsRetrieval, CreateAssistantRequestArgs, CreateFileRequestArgs, CreateMessageRequest, CreateMessageRequestArgs, CreateRunRequestArgs, CreateThreadRequestArgs, FileInput, MessageContent, RunStatus, ThreadObject}, Client};
+use async_openai::{config::OpenAIConfig, types::{AssistantObject, AssistantTools, AssistantToolsRetrieval, CreateAssistantFileRequest, CreateAssistantRequestArgs, CreateFileRequestArgs, CreateMessageRequest, CreateMessageRequestArgs, CreateRunRequestArgs, CreateThreadRequestArgs, FileInput, MessageContent, ModifyAssistantRequest, RunStatus, ThreadObject}, AssistantFiles, Client};
 use std::error::Error;
     
 #[tokio::main]
@@ -71,7 +74,9 @@ async fn main() {
                 qaBotId: String::new(),
                 qaBotApiKey: String::new()
             }),
-            assistant_id: Mutex::new(String::new())
+            assistant_id: Mutex::new(String::new()),
+            current_file: Mutex::new(String::new()),
+            thread_id: Mutex::new(String::new())
         })
         .setup(|app| {
             println!("Loading Config Directory");
@@ -147,8 +152,10 @@ async fn main() {
             list_system_fonts,
             llm_answer_question,
             create_assistant,
-            check_pdf_exists,
-            upload_file_and_create_thread_llm,
+            enable_qa_for_book,
+            disable_qa_for_book,
+            start_qa_bot,
+            stop_qa_bot,
             delete_thread,
             delete_assistant
         ])
@@ -170,7 +177,7 @@ struct AssistantDetails {
     qaBotApiKey: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 async fn create_assistant(api_key: String, shared_state: State<'_, SharedState>) -> Result<AssistantDetails, String> {
     let config = OpenAIConfig::new().with_api_key(api_key.clone());
     let client = Client::with_config(config);
@@ -352,7 +359,7 @@ fn import_book(payload: String) -> Result<BookHydrate, String> {
             println!("Error: Book does not have cover");
         }
     }
-}
+    }
 
     // }
 
@@ -424,22 +431,158 @@ fn import_book(payload: String) -> Result<BookHydrate, String> {
     return Ok(response);
 }
 
-#[tauri::command]
-fn check_pdf_exists(book_hash: &str) -> Result<bool, bool> {
+#[tauri::command(async)]
+async fn enable_qa_for_book(book_hash: &str, shared_state: State<'_, SharedState>) -> Result<bool, String> {
+    debug!("Received request to upload file and create thread for book {:?}", book_hash);
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+    let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
+
     println!("HEY PDF IS GOIUNG TO BE CHECKED");
     let hashed_book_folder = get_config_path().join("books").join(format!("{book_hash}"));
     let book_folder = fs::read_dir(&hashed_book_folder).unwrap();
+    let mut pdf_path = "".to_string();
     for book_file in book_folder {
-        
+
         let book_file = book_file.unwrap().path().display().to_string();
         println!("BOOK FILE: {}", book_file);
         let is_pdf = book_file.contains(".pdf");
         if is_pdf {
             println!("FOUND BIOTCHHHHH");
-            return Ok(true);
+            pdf_path = book_file;
         }
     }
-    return Err(false);
+    if (pdf_path.len() == 0) {
+        return Err("NO PDF FOUND :(".to_string());
+    }
+
+    // Upload file
+    let file_contents = fs::read(pdf_path.clone()).unwrap();
+    let bytes = bytes::Bytes::from(file_contents);
+    let file_request= CreateFileRequestArgs::default()
+        .file(FileInput::from_bytes(pdf_path, bytes))
+        .purpose("assistants")
+        .build().unwrap();
+    debug!("Open AI: File upload started");
+    // Try uploading the file three times. If it fails all three times, return an error
+    let mut attempts_left = 3;
+    let file = loop {
+        attempts_left -= 1;
+        if attempts_left == 0 {
+            return Err("Error: File upload failed".to_string());
+        }
+        let file_upload_result = client.files().create(file_request.clone()).await;
+        match file_upload_result {
+            Ok(file) => {
+                break file;
+            },
+            Err(e) => {
+                debug!("Open AI: File upload failed. Retrying. Attempts left: {}", attempts_left);
+                attempts_left -= 1;
+            }
+        }
+    };
+    let file_id = file.id;
+    debug!("Open AI: File upload finished");
+    debug!("Open AI: Modifying assistant to add file");
+    let assistant_files = AssistantFiles::new(&client, assistant_id.as_str());
+    let mut create_request = CreateAssistantFileRequest::default();
+    create_request.file_id = file_id.clone();
+    let result = assistant_files.create(create_request).await;
+    match result {
+        Ok(_) => {
+            *shared_state.current_file.lock().unwrap() = file_id.clone();
+            return Ok(true);
+        },
+        Err(e) => {
+            return Err(format!("Error: {:?}", e));
+        }
+    }
+}
+
+
+#[tauri::command(async)]
+async fn disable_qa_for_book(shared_state: State<'_, SharedState>) -> Result<bool, String> {
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+    let file_id = shared_state.current_file.lock().unwrap().clone();
+
+    let assistant_files = AssistantFiles::new(&client, assistant_id.as_str());
+    let result = assistant_files.delete(file_id.as_str()).await;
+    // TODO: How is failure handled? (ie) that is the assistant will have the File ID in there which costs extra money - leakage
+    match result {
+        Ok(_) => {
+            *shared_state.current_file.lock().unwrap() = "".to_string();
+        },
+        Err(e) => {
+            return Err(e.to_string());
+        }
+    }
+
+    let response = client.files().delete(file_id.as_str()).await;
+    match response {
+        Ok(_) => {
+            return Ok(true);
+        },
+        Err(e) => {
+            return Err(format!("Error: {}", e));
+        }
+    }
+}
+
+
+// async fn modify_assistant(assistant_id: &str, api_key: String, request: ModifyAssistantRequest) -> Result<bool, String> {
+//     // Create an assistant with the assistant_id and api_key
+//     let config = OpenAIConfig::new().with_api_key(api_key.clone());
+//     let client = Client::with_config(config);
+//     let response = client.assistants().update(assistant_id, request).await;
+//     match response {
+//         Ok(_) => {
+//             return Ok(true);
+//         },
+//         Err(e) => {
+//             return Err(format!("Error: {}", e));
+//         }
+//     }
+// }
+
+#[tauri::command(async)]
+async fn start_qa_bot(shared_state: State<'_, SharedState>) -> Result<bool, String> {
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+    let thread_request = CreateThreadRequestArgs::default().build().unwrap();
+    let result = client.threads().create(thread_request.clone()).await;
+    match result {
+        Ok(thread) => {
+            *shared_state.thread_id.lock().unwrap() = thread.id.clone();
+            return Ok(true);
+        },
+        Err(e) => {
+            return Err(format!("Error: {}", e));
+        }
+    }
+}
+
+#[tauri::command(async)]
+async fn stop_qa_bot(shared_state: State<'_, SharedState>) -> Result<bool, String> {
+    let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
+    let config = OpenAIConfig::new().with_api_key(api_key.clone());
+    let client = Client::with_config(config);
+    let thread_id = shared_state.thread_id.lock().unwrap().clone();
+    let result = client.threads().delete(thread_id.as_str()).await;
+    match result {
+        Ok(_) => {
+            *shared_state.thread_id.lock().unwrap() = "".to_string();
+            return Ok(true);
+        },
+        Err(e) => {
+            return Err(format!("Error: {}", e));
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -447,7 +590,7 @@ struct ThreadDetails {
     threadId: String,
     fileId: String
 }
-#[tauri::command]
+#[tauri::command(async)]
 async fn upload_file_and_create_thread_llm(book_hash: &str, shared_state: State<'_, SharedState>) -> Result<ThreadDetails, String> {
     debug!("Received request to upload file and create thread for book {:?}", book_hash);
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
@@ -585,7 +728,7 @@ struct BookHydrate {
     modified: u64
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 async fn delete_assistant(shared_state: State<'_, SharedState>) -> Result<String, String> {
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
     let assistant_id = &shared_state.settings.lock().unwrap().qaBotId.clone();
@@ -919,8 +1062,6 @@ async fn download_font(url: &str, name: &str, weight: &str) -> Result<String, St
 #[tauri::command]
 async fn add_system_font(name: &str) -> Result<String, String> {
 
-
-
     let file = File::open(get_font_folder_path().join("fonts.json")).unwrap();
 
     let reader = BufReader::new(file);
@@ -1125,8 +1266,9 @@ fn get_config_path_js() -> String {
 }
 
 // TODO: Why can I not set Resut<String, Error> here?
-#[tauri::command]
-async fn llm_answer_question(threadId: &str, context: String, question: String, shared_state: State<'_, SharedState>) -> Result<String, String>{
+#[tauri::command(async)]
+async fn llm_answer_question(context: String, question: String, shared_state: State<'_, SharedState>) -> Result<String, String>{
+    let threadId = shared_state.thread_id.lock().unwrap().clone();
     debug!("Open AI: Question asked with context: {}, question: {}", context.clone(), question.clone());
     // Ask the actual question
     let question = format!("Context: {}, Question: {}", context, question);
@@ -1139,7 +1281,7 @@ async fn llm_answer_question(threadId: &str, context: String, question: String, 
     let assistant_id = shared_state.settings.lock().unwrap().qaBotId.clone();
     let api_key = shared_state.settings.lock().unwrap().qaBotApiKey.clone();
     // FIXME: Cloning and sending will cause concurrency issues. Just making it work
-    let result = answer_question(assistant_id.as_str(), api_key, threadId, message).await;
+    let result = answer_question(assistant_id.as_str(), api_key, threadId.as_str(), message).await;
     debug!("Open AI: Question answered with answer: {}", result.clone().unwrap());
     return result;
 }
@@ -1176,12 +1318,14 @@ async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, m
     //wait for the run to complete
     let mut awaiting_response = true;
     while awaiting_response {
+        println!("--- Going to request OpenAI");
         //retrieve the run
         let run = client
             .threads()
             .runs(&thread.id)
             .retrieve(&run.id)
             .await.unwrap();
+        println!("--- Got back from OpenAI");
         //check the status of the run
         match run.status {
             RunStatus::Completed => {
@@ -1244,7 +1388,7 @@ async fn answer_question(assistant_id: &str, api_key: String, thread_id: &str, m
             }
         }
         //wait for 1 second before checking the status again
-        std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
     return Ok("Result not found".to_string());
 }
